@@ -6,8 +6,10 @@ use glow::HasContext;
 use hashbrown::HashMap;
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard, RwLock};
 
-/// The amount of time to wait while trying to obtain a lock to the adapter context
-const CONTEXT_LOCK_TIMEOUT_SECS: u64 = 6;
+/// The default amount of time to wait while trying to obtain a lock to the adapter context.
+///
+/// Can be overridden with [`wgt::GlBackendOptions::context_lock_timeout`].
+const CONTEXT_LOCK_TIMEOUT: Duration = Duration::from_secs(6);
 
 const EGL_CONTEXT_FLAGS_KHR: i32 = 0x30FC;
 const EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR: i32 = 0x0001;
@@ -196,6 +198,7 @@ impl EglContext {
 pub struct AdapterContext {
     glow: Mutex<ManuallyDrop<glow::Context>>,
     egl: Option<EglContext>,
+    lock_timeout: Duration,
 }
 
 unsafe impl Sync for AdapterContext {}
@@ -304,21 +307,40 @@ impl AdapterContext {
     pub unsafe fn get_without_egl_lock(&self) -> MappedMutexGuard<'_, glow::Context> {
         let guard = self
             .glow
-            .try_lock_for(Duration::from_secs(CONTEXT_LOCK_TIMEOUT_SECS))
+            .try_lock_for(self.lock_timeout)
             .expect("Could not lock adapter context. This is most-likely a deadlock.");
         MutexGuard::map(guard, |glow| &mut **glow)
     }
 
+    pub(super) fn set_lock_timeout(&mut self, timeout: Duration) {
+        self.lock_timeout = timeout;
+    }
+
     /// Obtain a lock to the EGL context and get handle to the [`glow::Context`] that can be used to
     /// do rendering.
+    ///
+    /// Panics if the lock cannot be obtained within the context lock timeout (see
+    /// [`wgt::GlBackendOptions::context_lock_timeout`]); [`try_lock`](Self::try_lock) returns an
+    /// error instead.
     #[track_caller]
     pub fn lock<'a>(&'a self) -> AdapterContextLock<'a> {
-        let glow = self
-            .glow
-            // Don't lock forever. If it takes longer than 1 second to get the lock we've got a
-            // deadlock and should panic to show where we got stuck
-            .try_lock_for(Duration::from_secs(CONTEXT_LOCK_TIMEOUT_SECS))
-            .expect("Could not lock adapter context. This is most-likely a deadlock.");
+        // Don't lock forever. If it takes longer than the timeout to get the lock we've got a
+        // deadlock and should panic to show where we got stuck
+        self.try_lock()
+            .expect("Could not lock adapter context. This is most-likely a deadlock.")
+    }
+
+    /// Like [`lock`](Self::lock), but returns [`crate::DeviceError::Lost`] instead of panicking
+    /// if the lock cannot be obtained within the context lock timeout.
+    #[track_caller]
+    pub fn try_lock<'a>(&'a self) -> Result<AdapterContextLock<'a>, crate::DeviceError> {
+        let Some(glow) = self.glow.try_lock_for(self.lock_timeout) else {
+            log::error!(
+                "Could not lock adapter context within {:?}. This is most-likely a deadlock.",
+                self.lock_timeout
+            );
+            return Err(crate::DeviceError::Lost);
+        };
 
         let egl = self.egl.as_ref().map(|egl| {
             egl.make_current();
@@ -328,7 +350,7 @@ impl AdapterContext {
             }
         });
 
-        AdapterContextLock { glow, egl }
+        Ok(AdapterContextLock { glow, egl })
     }
 }
 
@@ -1023,6 +1045,7 @@ impl crate::Instance for Instance {
                     glow: Mutex::new(gl),
                     // ERROR: Copying owned reference handles here, be careful to not drop them!
                     egl: Some(inner.egl.clone()),
+                    lock_timeout: CONTEXT_LOCK_TIMEOUT,
                 },
                 self.options.clone(),
             )
@@ -1052,6 +1075,7 @@ impl super::Adapter {
                 AdapterContext {
                     glow: Mutex::new(ManuallyDrop::new(context)),
                     egl: None,
+                    lock_timeout: CONTEXT_LOCK_TIMEOUT,
                 },
                 options,
             )

@@ -1896,7 +1896,7 @@ impl crate::Queue for super::Queue {
         (signal_fence, signal_value): (&mut super::Fence, crate::FenceValue),
     ) -> Result<(), crate::DeviceError> {
         let shared = Arc::clone(&self.shared);
-        let gl = &shared.context.lock();
+        let gl = &shared.context.try_lock()?;
         for cmd_buf in command_buffers.iter() {
             // The command encoder assumes a default state when encoding the command buffer.
             // Always reset the state between command_buffers to reflect this assumption. Do

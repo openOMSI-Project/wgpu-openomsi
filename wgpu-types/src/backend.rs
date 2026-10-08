@@ -266,6 +266,15 @@ pub struct GlBackendOptions {
     ///
     /// [`InstanceFlags::DISCARD_HAL_LABELS`]: crate::InstanceFlags::DISCARD_HAL_LABELS
     pub debug_fns: GlDebugFns,
+    /// How long a thread waits for the shared GL context before giving up.
+    ///
+    /// The OpenGL backend has a single GL context per adapter, guarded by a lock. A thread that
+    /// cannot get it within this time assumes a deadlock: operations that can fail then return
+    /// a "device lost" error, all others panic.
+    ///
+    /// `None` (the default) uses the backend's built-in timeout: 6 seconds with EGL and
+    /// 1 second with WGL.
+    pub context_lock_timeout: Option<core::time::Duration>,
 }
 
 impl GlBackendOptions {
@@ -280,6 +289,7 @@ impl GlBackendOptions {
             gles_minor_version,
             fence_behavior: GlFenceBehavior::Normal,
             debug_fns,
+            context_lock_timeout: None,
         }
     }
 
@@ -295,6 +305,7 @@ impl GlBackendOptions {
             gles_minor_version,
             fence_behavior,
             debug_fns,
+            context_lock_timeout: self.context_lock_timeout,
         }
     }
 }

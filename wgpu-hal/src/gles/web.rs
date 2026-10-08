@@ -24,6 +24,14 @@ impl AdapterContext {
     pub fn lock(&self) -> &glow::Context {
         &self.glow_context
     }
+
+    /// Same as [`lock`](Self::lock): on the web there is no lock to time out.
+    #[allow(clippy::unnecessary_wraps)]
+    pub fn try_lock(&self) -> Result<&glow::Context, crate::DeviceError> {
+        Ok(&self.glow_context)
+    }
+
+    pub(super) fn set_lock_timeout(&mut self, _timeout: core::time::Duration) {}
 }
 
 #[derive(Debug)]

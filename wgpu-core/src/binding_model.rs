@@ -439,11 +439,26 @@ pub(crate) struct BindingTypeMaxCountValidator {
     binding_array_sampler_elements: PerStageBindingTypeCounter,
     binding_array_acceleration_structure_elements: PerStageBindingTypeCounter,
     has_bindless_array: bool,
+    /// Sampled textures over all stages, each binding counted once whatever its visibility.
+    sampled_textures_all_stages: u32,
+    /// Samplers over all stages, each binding counted once whatever its visibility.
+    samplers_all_stages: u32,
 }
 
 impl BindingTypeMaxCountValidator {
     pub(crate) fn add_binding(&mut self, binding: &wgt::BindGroupLayoutEntry) {
         let count = binding.count.map_or(1, |count| count.get());
+
+        match binding.ty {
+            wgt::BindingType::Texture { .. } => self.sampled_textures_all_stages += count,
+            wgt::BindingType::Sampler(_) => self.samplers_all_stages += count,
+            wgt::BindingType::ExternalTexture => {
+                // Same conservative accounting as the per-stage counters below.
+                self.sampled_textures_all_stages += count * 4;
+                self.samplers_all_stages += count;
+            }
+            _ => {}
+        }
 
         if binding.count.is_some() {
             self.binding_array_elements.add(binding.visibility, count);
@@ -527,6 +542,31 @@ impl BindingTypeMaxCountValidator {
             .merge(&other.binding_array_sampler_elements);
         self.binding_array_acceleration_structure_elements
             .merge(&other.binding_array_acceleration_structure_elements);
+        self.sampled_textures_all_stages += other.sampled_textures_all_stages;
+        self.samplers_all_stages += other.samplers_all_stages;
+    }
+
+    /// Validate the counts against the downlevel limits that apply to a whole pipeline
+    /// layout, over all of its shader stages together.
+    pub(crate) fn validate_downlevel(
+        &self,
+        limits: &wgt::DownlevelLimits,
+    ) -> Result<(), CreatePipelineLayoutError> {
+        if limits.max_sampled_textures_per_pipeline_layout < self.sampled_textures_all_stages {
+            return Err(CreatePipelineLayoutError::TooManyBindingsAllStages {
+                kind: BindingTypeMaxCountErrorKind::SampledTextures,
+                limit: limits.max_sampled_textures_per_pipeline_layout,
+                count: self.sampled_textures_all_stages,
+            });
+        }
+        if limits.max_samplers_per_pipeline_layout < self.samplers_all_stages {
+            return Err(CreatePipelineLayoutError::TooManyBindingsAllStages {
+                kind: BindingTypeMaxCountErrorKind::Samplers,
+                limit: limits.max_samplers_per_pipeline_layout,
+                count: self.samplers_all_stages,
+            });
+        }
+        Ok(())
     }
 
     pub(crate) fn validate(&self, limits: &wgt::Limits) -> Result<(), BindingTypeMaxCountError> {
@@ -832,6 +872,12 @@ pub enum CreatePipelineLayoutError {
     ImmediateRangeTooLarge { size: u32, max: u32 },
     #[error(transparent)]
     TooManyBindings(BindingTypeMaxCountError),
+    #[error("Too many bindings of type {kind:?} in the pipeline layout over all shader stages together, limit is {limit}, count was {count}. This is a downlevel limit of the adapter, see `DownlevelLimits`")]
+    TooManyBindingsAllStages {
+        kind: BindingTypeMaxCountErrorKind,
+        limit: u32,
+        count: u32,
+    },
     #[error("Bind group layout count {actual} exceeds device bind group limit {max}")]
     TooManyGroups { actual: usize, max: usize },
     #[error(transparent)]
@@ -850,6 +896,7 @@ impl WebGpuError for CreatePipelineLayoutError {
             Self::MisalignedImmediateSize { .. }
             | Self::ImmediateRangeTooLarge { .. }
             | Self::TooManyGroups { .. }
+            | Self::TooManyBindingsAllStages { .. }
             | Self::BglHasExclusivePipeline { .. } => ErrorType::Validation,
         }
     }
@@ -1359,4 +1406,63 @@ pub struct LateMinBufferBindingSizeMismatch {
     pub binding_index: u32,
     pub shader_size: wgt::BufferAddress,
     pub bound_size: wgt::BufferAddress,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn texture(binding: u32, visibility: wgt::ShaderStages) -> wgt::BindGroupLayoutEntry {
+        wgt::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty: wgt::BindingType::Texture {
+                sample_type: wgt::TextureSampleType::Float { filterable: true },
+                view_dimension: wgt::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }
+    }
+
+    #[test]
+    fn sampled_textures_all_stages_limit() {
+        let limits = wgt::DownlevelLimits {
+            max_sampled_textures_per_pipeline_layout: 16,
+            ..wgt::DownlevelLimits::DEFAULT
+        };
+
+        // 10 vertex-only and 10 fragment-only textures: 10 per stage, 20 in all.
+        let mut group0 = BindingTypeMaxCountValidator::default();
+        let mut group1 = BindingTypeMaxCountValidator::default();
+        for binding in 0..10 {
+            group0.add_binding(&texture(binding, wgt::ShaderStages::VERTEX));
+            group1.add_binding(&texture(binding, wgt::ShaderStages::FRAGMENT));
+        }
+        let mut layout = BindingTypeMaxCountValidator::default();
+        layout.merge(&group0);
+        assert!(layout.validate_downlevel(&limits).is_ok());
+        layout.merge(&group1);
+        assert!(layout
+            .validate(&wgt::Limits::downlevel_webgl2_defaults())
+            .is_ok());
+        assert!(matches!(
+            layout.validate_downlevel(&limits),
+            Err(CreatePipelineLayoutError::TooManyBindingsAllStages {
+                kind: BindingTypeMaxCountErrorKind::SampledTextures,
+                limit: 16,
+                count: 20,
+            })
+        ));
+        assert!(layout
+            .validate_downlevel(&wgt::DownlevelLimits::DEFAULT)
+            .is_ok());
+
+        // A binding visible to both stages takes a single slot.
+        let mut shared = BindingTypeMaxCountValidator::default();
+        for binding in 0..16 {
+            shared.add_binding(&texture(binding, wgt::ShaderStages::VERTEX_FRAGMENT));
+        }
+        assert!(shared.validate_downlevel(&limits).is_ok());
+    }
 }

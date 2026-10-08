@@ -2334,7 +2334,7 @@ impl super::Instance {
             alignments,
             downlevel: wgt::DownlevelCapabilities {
                 flags: downlevel_flags,
-                limits: wgt::DownlevelLimits {},
+                limits: wgt::DownlevelLimits::DEFAULT,
                 shader_model: wgt::ShaderModel::Sm5, //TODO?
             },
             cooperative_matrix_properties: phd_capabilities.cooperative_matrix_properties.clone(),

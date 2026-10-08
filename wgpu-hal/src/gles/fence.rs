@@ -98,6 +98,16 @@ impl Fence {
         self.pending.retain(|&gl_fence| gl_fence.value > latest);
     }
 
+    /// Whether [`Self::wait`] for `value` may block: there is a GL sync object to wait on.
+    ///
+    /// When this is `false`, `wait` returns immediately whatever its timeout.
+    #[cfg_attr(any(webgl, Emscripten), allow(dead_code))]
+    pub fn can_block_on(&self, value: crate::FenceValue) -> bool {
+        !self.fence_behavior.is_auto_finish()
+            && self.last_completed.load(Ordering::Acquire) < value
+            && self.pending.iter().any(|gl_fence| gl_fence.value >= value)
+    }
+
     pub fn wait(
         &self,
         gl: &glow::Context,

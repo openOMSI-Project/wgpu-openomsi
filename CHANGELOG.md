@@ -50,6 +50,11 @@ Bottom level categories:
 - [hlsl-out] Reserve DXC's built-in ray tracing names (`RAY_FLAG_*`, `COMMITTED_*`, `CANDIDATE_*`, `HIT_KIND_*`, `RAYTRACING_PIPELINE_FLAG_*`), so user identifiers with these names are renamed instead of redefining the built-ins.
 - [hlsl-out, spv-out] Reset a ray query's initialization tracker when the query is initialized again. In HLSL, a query initialized again after finishing a traversal (e.g. in a loop) never proceeded again and always reported no hit; in SPIR-V, an invalid re-initialization kept the previous traversal's state.
 
+#### GLES
+
+- Size the texture unit tables from `GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS` (up to 32) instead of a fixed 16, report `max_sampled_textures_per_shader_stage` from the driver's per-stage units, and report the combined count in the new `DownlevelLimits::max_sampled_textures_per_pipeline_layout` (and `max_samplers_per_pipeline_layout`). A pipeline layout using more texture units over all of its groups and stages than that is now rejected with `CreatePipelineLayoutError::TooManyBindingsAllStages` instead of panicking with an index out of bounds when the pipeline is created.
+- `Device::wait` (and so `Device::poll` with `PollType::Wait`) now waits on the GL fence in 5 ms slices and unlocks the shared GL context between them, so other threads using the device are no longer locked out for the whole wait (and no longer panic with "Could not lock adapter context" while one thread waits for the GPU). Add `GlBackendOptions::context_lock_timeout` to configure how long a thread waits for the GL context (default unchanged: 6 s with EGL, 1 s with WGL); fallible device and queue operations now return `DeviceError::Lost` when it times out instead of panicking.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features

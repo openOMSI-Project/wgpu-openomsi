@@ -779,12 +779,34 @@ impl Limits {
 /// which take place when running on downlevel backends.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct DownlevelLimits {}
+pub struct DownlevelLimits {
+    /// Maximum number of sampled textures in a pipeline layout, counted over all of its bind
+    /// groups and all shader stages together (a binding visible to several stages counts
+    /// once).
+    ///
+    /// This is in addition to [`Limits::max_sampled_textures_per_shader_stage`]. Backends that
+    /// have a single pool of texture units shared by all stages (OpenGL) report the size of
+    /// that pool here; all other backends report `u32::MAX`.
+    pub max_sampled_textures_per_pipeline_layout: u32,
+    /// Maximum number of samplers in a pipeline layout, counted over all of its bind groups
+    /// and all shader stages together (a binding visible to several stages counts once).
+    ///
+    /// This is in addition to [`Limits::max_samplers_per_shader_stage`]. All backends except
+    /// OpenGL report `u32::MAX`.
+    pub max_samplers_per_pipeline_layout: u32,
+}
 
-#[allow(clippy::derivable_impls)]
+impl DownlevelLimits {
+    /// The limits of a backend with no downlevel restrictions.
+    pub const DEFAULT: Self = Self {
+        max_sampled_textures_per_pipeline_layout: u32::MAX,
+        max_samplers_per_pipeline_layout: u32::MAX,
+    };
+}
+
 impl Default for DownlevelLimits {
     fn default() -> Self {
-        DownlevelLimits {}
+        Self::DEFAULT
     }
 }
 

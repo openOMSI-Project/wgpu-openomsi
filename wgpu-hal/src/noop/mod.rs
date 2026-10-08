@@ -229,7 +229,7 @@ pub const CAPABILITIES: crate::Capabilities = {
         },
         downlevel: wgt::DownlevelCapabilities {
             flags: wgt::DownlevelFlags::all(),
-            limits: wgt::DownlevelLimits {},
+            limits: wgt::DownlevelLimits::DEFAULT,
             shader_model: wgt::ShaderModel::Sm5,
         },
         cooperative_matrix_properties: Vec::new(),

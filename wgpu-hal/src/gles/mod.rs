@@ -130,10 +130,19 @@ use crate::{CopyExtent, TextureDescriptor};
 #[derive(Clone, Debug)]
 pub struct Api;
 
-//Note: we can support more samplers if not every one of them is used at a time,
-// but it probably doesn't worth it.
-const MAX_TEXTURE_SLOTS: usize = 16;
-const MAX_SAMPLERS: usize = 16;
+/// Texture units every implementation we support has: GLES 3.0 and GL 3.3 guarantee 16 per
+/// stage (and 32 or 48 combined).
+const MIN_TEXTURE_SLOTS: usize = 16;
+/// Upper bound on the texture units a pipeline layout can use, over all of its bind groups and
+/// all shader stages together. The actual limit is the driver's
+/// `GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS` capped to this, reported as
+/// [`wgt::DownlevelLimits::max_sampled_textures_per_pipeline_layout`].
+///
+/// Must not exceed 32: the dirty masks in the command encoder are `u32` bitmasks.
+const MAX_TEXTURE_SLOTS: usize = 32;
+/// Upper bound on the samplers a pipeline layout can use, over all of its bind groups and
+/// all shader stages together. Same bitmask restriction as `MAX_TEXTURE_SLOTS`.
+const MAX_SAMPLERS: usize = 32;
 const MAX_VERTEX_ATTRIBUTES: usize = 16;
 const ZERO_BUFFER_SIZE: usize = 256 << 10;
 const MAX_IMMEDIATES: usize = 64;
