@@ -232,6 +232,8 @@ impl super::Adapter {
         let vendor = unsafe { gl.get_parameter_string(vendor_const) };
         let renderer = unsafe { gl.get_parameter_string(renderer_const) };
         let version = unsafe { gl.get_parameter_string(glow::VERSION) };
+        // (cached program binaries are only good for the driver that made them)
+        let pipeline_cache_validation_key = super::PipelineCache::driver_key(&vendor, &renderer, &version);
         log::debug!("Vendor: {vendor}");
         log::debug!("Renderer: {renderer}");
         log::debug!("Version: {version}");
@@ -518,6 +520,13 @@ impl super::Adapter {
             wgt::Features::SHADER_EARLY_DEPTH_TEST,
             supported((3, 1), (4, 2)) || extensions.contains("GL_ARB_shader_image_load_store"),
         );
+        // Program binaries (GLES 3.0, GL 4.1, `GL_ARB_get_program_binary`) back the pipeline
+        // cache, where the driver offers at least one binary format.
+        #[cfg(native)]
+        features.set(wgt::Features::PIPELINE_CACHE, {
+            let binaries = supported((3, 0), (4, 1)) || extensions.contains("GL_ARB_get_program_binary") || extensions.contains("GL_OES_get_program_binary");
+            binaries && unsafe { gl.get_parameter_i32(glow::NUM_PROGRAM_BINARY_FORMATS) } > 0
+        });
         if extensions.contains("GL_ARB_timer_query") {
             features.set(wgt::Features::TIMESTAMP_QUERY, true);
             features.set(wgt::Features::TIMESTAMP_QUERY_INSIDE_ENCODERS, true);
@@ -921,6 +930,7 @@ impl super::Adapter {
                     shading_language_version,
                     next_shader_id: Default::default(),
                     program_cache: Default::default(),
+                    pipeline_cache_validation_key,
                     es: es_ver.is_some(),
                     max_msaa_samples: max_samples,
                 }),
