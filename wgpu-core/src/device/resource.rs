@@ -1224,11 +1224,25 @@ impl Device {
         Ok(())
     }
 
+    /// `initial_uses` is the state the texture is tracked from: the state it is in on the GPU
+    /// when wgpu first uses it.
     pub(crate) fn create_texture_from_hal(
         self: &Arc<Self>,
         hal_texture: Box<dyn hal::DynTexture>,
         desc: &resource::TextureDescriptor,
+        initial_uses: wgt::TextureUses,
     ) -> Result<Arc<Texture>, resource::CreateTextureError> {
+        // A single state, as the tracker holds it: not empty, and an exclusive use alone.
+        if initial_uses.is_empty()
+            || initial_uses.intersects(wgt::TextureUses::COMPLEX | wgt::TextureUses::UNKNOWN)
+            || (initial_uses.intersects(wgt::TextureUses::EXCLUSIVE)
+                && !initial_uses.bits().is_power_of_two())
+        {
+            return Err(resource::CreateTextureError::InvalidInitialUses(
+                initial_uses,
+            ));
+        }
+
         let format_features = self
             .describe_format_features(desc.format)
             .map_err(|error| resource::CreateTextureError::MissingFeatures(desc.format, error))?;
@@ -1250,7 +1264,7 @@ impl Device {
         self.trackers
             .lock()
             .textures
-            .insert_single(&texture, wgt::TextureUses::UNINITIALIZED);
+            .insert_single(&texture, initial_uses);
 
         Ok(texture)
     }

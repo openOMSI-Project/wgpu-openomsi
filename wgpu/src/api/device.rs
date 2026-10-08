@@ -327,11 +327,60 @@ impl Device {
         hal_texture: A::Texture,
         desc: &TextureDescriptor<'_>,
     ) -> Texture {
+        unsafe {
+            self.create_texture_from_hal_with_uses::<A>(
+                hal_texture,
+                desc,
+                TextureUses::UNINITIALIZED,
+            )
+        }
+    }
+
+    /// Creates a [`Texture`] from a wgpu-hal Texture that is already in the state
+    /// `initial_uses` maps to, so that wgpu tracks it from there.
+    ///
+    /// [`Device::create_texture_from_hal`] assumes a texture wgpu has not used yet,
+    /// which the first barrier transitions from the backend's initial state
+    /// (`D3D12_RESOURCE_STATE_COMMON` on DX12, `VK_IMAGE_LAYOUT_UNDEFINED` on Vulkan). A
+    /// texture another API hands over in a different state, such as an OpenXR swapchain
+    /// image in `D3D12_RESOURCE_STATE_RENDER_TARGET`, can be described with
+    /// [`TextureUses::COLOR_TARGET`] instead.
+    ///
+    /// `initial_uses` must be a single state: an exclusive use alone, or a combination of
+    /// read-only uses. Otherwise a validation error is raised.
+    ///
+    /// # Types
+    ///
+    /// The type of `A::Texture` depends on the backend:
+    ///
+    #[doc = crate::macros::hal_type_vulkan!("Texture")]
+    #[doc = crate::macros::hal_type_metal!("Texture")]
+    #[doc = crate::macros::hal_type_dx12!("Texture")]
+    #[doc = crate::macros::hal_type_gles!("Texture")]
+    ///
+    /// # Safety
+    ///
+    /// - `hal_texture` must be created from this device internal handle
+    /// - `hal_texture` must be created respecting `desc`
+    /// - `hal_texture` must be initialized
+    /// - all subresources of `hal_texture` must be in the backend state `initial_uses` maps
+    ///   to when the first submission using the texture executes
+    #[cfg(wgpu_core)]
+    #[must_use]
+    pub unsafe fn create_texture_from_hal_with_uses<A: hal::Api>(
+        &self,
+        hal_texture: A::Texture,
+        desc: &TextureDescriptor<'_>,
+        initial_uses: TextureUses,
+    ) -> Texture {
         let texture = unsafe {
             let core_device = self.inner.as_core();
-            core_device
-                .context
-                .create_texture_from_hal::<A>(hal_texture, core_device, desc)
+            core_device.context.create_texture_from_hal::<A>(
+                hal_texture,
+                core_device,
+                desc,
+                initial_uses,
+            )
         };
         Texture {
             inner: texture.into(),
@@ -580,6 +629,47 @@ impl Device {
     ) -> Option<impl Deref<Target = A::Device> + WasmNotSendSync> {
         let device = self.inner.as_core_opt()?;
         unsafe { device.context.device_as_hal::<A>(device) }
+    }
+
+    /// Get the [`wgpu_hal`] fence that this `Device`'s queue signals on every submission.
+    ///
+    /// After [`Queue::submit`] returns a [`SubmissionIndex`], the GPU sets the fence to
+    /// [`SubmissionIndex::hal_fence_value`] once that submission has completed. Another API
+    /// can wait on the raw fence for exactly that value, instead of the application blocking
+    /// in [`Device::poll`]. On DX12, `wgpu_hal::dx12::Fence::raw_fence` gives the
+    /// `ID3D12Fence`, for example for `ID3D12CommandQueue::Wait` on another queue.
+    ///
+    /// Returns a guard that dereferences to the type of the hal backend
+    /// which implements [`A::Fence`].
+    ///
+    /// # Types
+    ///
+    /// The returned type depends on the backend:
+    ///
+    #[doc = crate::macros::hal_type_vulkan!("Fence")]
+    #[doc = crate::macros::hal_type_metal!("Fence")]
+    #[doc = crate::macros::hal_type_dx12!("Fence")]
+    #[doc = crate::macros::hal_type_gles!("Fence")]
+    ///
+    /// # Errors
+    ///
+    /// This method will return None if:
+    /// - The device is not from the backend specified by `A`.
+    /// - The device is from the `webgpu` or `custom` backend.
+    ///
+    /// # Safety
+    ///
+    /// - The guard holds the device's fence lock: drop it before calling [`Queue::submit`]
+    ///   or [`Device::poll`] on this thread, or they deadlock. A raw handle cloned out of it
+    ///   (a COM reference on DX12) may be kept.
+    /// - The fence must not be signalled, reset or destroyed by anyone but wgpu.
+    /// - All the safety requirements of wgpu-hal must be upheld.
+    ///
+    /// [`A::Fence`]: hal::Api::Fence
+    #[cfg(wgpu_core)]
+    pub unsafe fn as_hal_fence<A: hal::Api>(&self) -> Option<impl Deref<Target = A::Fence>> {
+        let device = self.inner.as_core_opt()?;
+        unsafe { device.context.device_fence_as_hal::<A>(device) }
     }
 
     /// Destroy this device.

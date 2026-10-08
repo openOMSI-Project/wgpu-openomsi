@@ -55,6 +55,10 @@ Bottom level categories:
 - Size the texture unit tables from `GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS` (up to 32) instead of a fixed 16, report `max_sampled_textures_per_shader_stage` from the driver's per-stage units, and report the combined count in the new `DownlevelLimits::max_sampled_textures_per_pipeline_layout` (and `max_samplers_per_pipeline_layout`). A pipeline layout using more texture units over all of its groups and stages than that is now rejected with `CreatePipelineLayoutError::TooManyBindingsAllStages` instead of panicking with an index out of bounds when the pipeline is created.
 - `Device::wait` (and so `Device::poll` with `PollType::Wait`) now waits on the GL fence in 5 ms slices and unlocks the shared GL context between them, so other threads using the device are no longer locked out for the whole wait (and no longer panic with "Could not lock adapter context" while one thread waits for the GPU). Add `GlBackendOptions::context_lock_timeout` to configure how long a thread waits for the GL context (default unchanged: 6 s with EGL, 1 s with WGL); fallible device and queue operations now return `DeviceError::Lost` when it times out instead of panicking.
 
+- Add `Adapter::memory_info()`, returning the adapter's dedicated and shared memory sizes and, where the backend reports them, the current memory budget and usage (`AdapterMemoryInfo`). Implemented for Vulkan (memory heaps, `VK_EXT_memory_budget`), DX12 (DXGI adapter description, `QueryVideoMemoryInfo`) and Metal (`recommendedMaxWorkingSetSize`, `currentAllocatedSize`); `None` elsewhere.
+- Add `Device::create_texture_from_hal_with_uses()`, which tracks a texture created from a hal texture from the given `TextureUses` instead of `UNINITIALIZED`, for textures another API hands over in a known state (e.g. OpenXR swapchain images in `D3D12_RESOURCE_STATE_RENDER_TARGET`).
+- Add `Device::as_hal_fence()` and `SubmissionIndex::hal_fence_value()`, so that another API can wait on the device's hal fence (e.g. the `ID3D12Fence` on DX12) for exactly one submission instead of the application polling the device.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features

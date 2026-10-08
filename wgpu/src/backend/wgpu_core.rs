@@ -139,11 +139,17 @@ impl ContextWgpuCore {
         hal_texture: A::Texture,
         device: &CoreDevice,
         desc: &TextureDescriptor<'_>,
+        initial_uses: wgt::TextureUses,
     ) -> CoreTexture {
         let descriptor = desc.map_label_and_view_formats(|l| l.map(Borrowed), |v| v.to_vec());
         let (id, error) = unsafe {
-            self.0
-                .create_texture_from_hal(Box::new(hal_texture), device.id, &descriptor, None)
+            self.0.create_texture_from_hal_with_uses(
+                Box::new(hal_texture),
+                device.id,
+                &descriptor,
+                initial_uses,
+                None,
+            )
         };
         if let Some(cause) = error {
             self.handle_error(
@@ -200,6 +206,13 @@ impl ContextWgpuCore {
         device: &CoreDevice,
     ) -> Option<impl Deref<Target = A::Device>> {
         unsafe { self.0.device_as_hal::<A>(device.id) }
+    }
+
+    pub unsafe fn device_fence_as_hal<A: hal::Api>(
+        &self,
+        device: &CoreDevice,
+    ) -> Option<impl Deref<Target = A::Fence>> {
+        unsafe { self.0.device_fence_as_hal::<A>(device.id) }
     }
 
     pub unsafe fn surface_as_hal<A: hal::Api>(
@@ -993,6 +1006,10 @@ impl dispatch::AdapterInterface for CoreAdapter {
 
     fn get_presentation_timestamp(&self) -> crate::PresentationTimestamp {
         self.context.0.adapter_get_presentation_timestamp(self.id)
+    }
+
+    fn memory_info(&self) -> Option<crate::AdapterMemoryInfo> {
+        self.context.0.adapter_memory_info(self.id)
     }
 
     fn cooperative_matrix_properties(&self) -> Vec<crate::wgt::CooperativeMatrixProperties> {

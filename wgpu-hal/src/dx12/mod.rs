@@ -1083,6 +1083,12 @@ unsafe impl Send for Fence {}
 unsafe impl Sync for Fence {}
 
 impl Fence {
+    /// The raw `ID3D12Fence`.
+    ///
+    /// [`Queue::submit`](crate::Queue::submit) signals it on the queue's
+    /// `ID3D12CommandQueue` with the value passed to it, after the submitted command lists,
+    /// so another queue or API can wait for exactly that submission with
+    /// `ID3D12CommandQueue::Wait` or `ID3D12Fence::SetEventOnCompletion`.
     pub fn raw_fence(&self) -> &Direct3D12::ID3D12Fence {
         &self.raw
     }

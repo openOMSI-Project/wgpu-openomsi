@@ -329,6 +329,37 @@ impl Global {
         desc: &resource::TextureDescriptor,
         id_in: Option<id::TextureId>,
     ) -> (id::TextureId, Option<resource::CreateTextureError>) {
+        unsafe {
+            self.create_texture_from_hal_with_uses(
+                hal_texture,
+                device_id,
+                desc,
+                wgt::TextureUses::UNINITIALIZED,
+                id_in,
+            )
+        }
+    }
+
+    /// Like [`Self::create_texture_from_hal`], but tracks the texture from `initial_uses`
+    /// instead of [`wgt::TextureUses::UNINITIALIZED`].
+    ///
+    /// # Safety
+    ///
+    /// - `hal_texture` must be created from `device_id` corresponding raw handle.
+    /// - `hal_texture` must be created respecting `desc`
+    /// - `hal_texture` must be initialized
+    /// - All subresources of `hal_texture` must be in the backend state that `initial_uses`
+    ///   maps to when the first submission that uses the texture executes, e.g.
+    ///   `D3D12_RESOURCE_STATE_RENDER_TARGET` for [`wgt::TextureUses::COLOR_TARGET`] on DX12,
+    ///   or `VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL` on Vulkan.
+    pub unsafe fn create_texture_from_hal_with_uses(
+        &self,
+        hal_texture: Box<dyn hal::DynTexture>,
+        device_id: DeviceId,
+        desc: &resource::TextureDescriptor,
+        initial_uses: wgt::TextureUses,
+        id_in: Option<id::TextureId>,
+    ) -> (id::TextureId, Option<resource::CreateTextureError>) {
         profiling::scope!("Device::create_texture_from_hal");
 
         let hub = &self.hub;
@@ -338,7 +369,7 @@ impl Global {
         let error = 'error: {
             let device = self.hub.devices.get(device_id);
 
-            let texture = match device.create_texture_from_hal(hal_texture, desc) {
+            let texture = match device.create_texture_from_hal(hal_texture, desc, initial_uses) {
                 Ok(texture) => texture,
                 Err(error) => break 'error error,
             };

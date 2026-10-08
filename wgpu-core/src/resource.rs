@@ -1641,6 +1641,8 @@ pub enum CreateTextureError {
     MissingFeatures(wgt::TextureFormat, #[source] MissingFeatures),
     #[error(transparent)]
     MissingDownlevelFlags(#[from] MissingDownlevelFlags),
+    #[error("Texture uses {0:?} are not a valid initial state for a texture")]
+    InvalidInitialUses(wgt::TextureUses),
 }
 
 crate::impl_resource_type!(Texture);
@@ -1675,7 +1677,8 @@ impl WebGpuError for CreateTextureError {
             | Self::InvalidMultisampledStorageBinding
             | Self::InvalidMultisampledFormat(_)
             | Self::InvalidSampleCount(..)
-            | Self::MultisampledNotRenderAttachment => ErrorType::Validation,
+            | Self::MultisampledNotRenderAttachment
+            | Self::InvalidInitialUses(_) => ErrorType::Validation,
         }
     }
 }

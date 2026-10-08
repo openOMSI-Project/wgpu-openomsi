@@ -727,6 +727,10 @@ impl Adapter {
         unsafe { self.raw.adapter.get_presentation_timestamp() }
     }
 
+    pub fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo> {
+        unsafe { self.raw.adapter.memory_info() }
+    }
+
     pub fn cooperative_matrix_properties(&self) -> Vec<wgt::CooperativeMatrixProperties> {
         self.raw.capabilities.cooperative_matrix_properties.clone()
     }
@@ -1172,6 +1176,11 @@ impl Global {
     ) -> wgt::PresentationTimestamp {
         let adapter = self.hub.adapters.get(adapter_id);
         adapter.get_presentation_timestamp()
+    }
+
+    pub fn adapter_memory_info(&self, adapter_id: AdapterId) -> Option<wgt::AdapterMemoryInfo> {
+        let adapter = self.hub.adapters.get(adapter_id);
+        adapter.memory_info()
     }
 
     pub fn adapter_cooperative_matrix_properties(

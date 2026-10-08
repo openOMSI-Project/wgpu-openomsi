@@ -48,6 +48,17 @@ pub struct SubmissionIndex {
 #[cfg(send_sync)]
 static_assertions::assert_impl_all!(SubmissionIndex: Send, Sync);
 
+impl SubmissionIndex {
+    /// The value the device's [`wgpu_hal`] fence (see [`Device::as_hal_fence`]) is set to
+    /// when this submission has completed on the GPU.
+    ///
+    /// Only meaningful for wgpu-core backends (Vulkan, Metal, DX12, GLES).
+    #[cfg(wgpu_core)]
+    pub fn hal_fence_value(&self) -> u64 {
+        self.index
+    }
+}
+
 /// Passed to [`Device::poll`] to control how and if it should block.
 pub type PollType = wgt::PollType<SubmissionIndex>;
 #[cfg(send_sync)]

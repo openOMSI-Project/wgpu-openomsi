@@ -37,6 +37,8 @@ pub trait DynAdapter: DynResource {
 
     unsafe fn get_presentation_timestamp(&self) -> wgt::PresentationTimestamp;
 
+    unsafe fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo>;
+
     fn get_ordered_buffer_usages(&self) -> wgt::BufferUses;
 
     fn get_ordered_texture_usages(&self) -> wgt::TextureUses;
@@ -69,6 +71,10 @@ impl<A: Adapter + DynResource> DynAdapter for A {
 
     unsafe fn get_presentation_timestamp(&self) -> wgt::PresentationTimestamp {
         unsafe { A::get_presentation_timestamp(self) }
+    }
+
+    unsafe fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo> {
+        unsafe { A::memory_info(self) }
     }
 
     fn get_ordered_buffer_usages(&self) -> wgt::BufferUses {

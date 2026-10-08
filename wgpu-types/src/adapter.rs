@@ -299,3 +299,36 @@ pub struct CooperativeMatrixProperties {
     /// When true, the multiply-add operation clamps the result to prevent overflow.
     pub saturating_accumulation: bool,
 }
+
+/// Memory sizes reported by an adapter, see `Adapter::memory_info`.
+///
+/// All sizes are in bytes. What counts as "dedicated" and "shared" memory is backend-specific:
+///
+/// - Vulkan: `dedicated_bytes` is the sum of the `DEVICE_LOCAL` memory heaps and `shared_bytes`
+///   the sum of the other heaps. On an integrated or CPU adapter whose heaps are all
+///   `DEVICE_LOCAL` (unified memory), the heaps are reported as `shared_bytes` instead.
+///   `budget_bytes` and `usage_bytes` come from `VK_EXT_memory_budget`, when supported.
+/// - DX12: `DedicatedVideoMemory` and `SharedSystemMemory` of the DXGI adapter description.
+///   `budget_bytes` and `usage_bytes` come from `IDXGIAdapter3::QueryVideoMemoryInfo` for the
+///   local segment group.
+/// - Metal: the device's `recommendedMaxWorkingSetSize`, reported as `shared_bytes` on a device
+///   with unified memory and as `dedicated_bytes` otherwise; it is also the `budget_bytes`.
+///   `usage_bytes` is the device's `currentAllocatedSize`.
+///
+/// `budget_bytes` and `usage_bytes` describe the same memory as `dedicated_bytes`, or as
+/// `shared_bytes` when `dedicated_bytes` is zero. They may change between calls.
+#[derive(Clone, Copy, Debug, Default, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct AdapterMemoryInfo {
+    /// Memory local to the adapter, not shared with the CPU (video memory).
+    ///
+    /// Zero on adapters with unified memory.
+    pub dedicated_bytes: u64,
+    /// System memory the adapter can use.
+    pub shared_bytes: u64,
+    /// How much memory the process may currently use before it should expect paging or
+    /// allocation failures, if the backend reports it.
+    pub budget_bytes: Option<u64>,
+    /// How much memory the process currently uses, if the backend reports it.
+    pub usage_bytes: Option<u64>,
+}
