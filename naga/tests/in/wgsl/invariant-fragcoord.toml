@@ -1,0 +1,6 @@
+targets = "GLSL"
+
+[glsl]
+version.Desktop = 330
+writer_flags = ""
+zero_initialize_workgroup_memory = true

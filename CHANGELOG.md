@@ -42,6 +42,12 @@ Bottom level categories:
 
 ## Unreleased
 
+### openOMSI fork
+
+#### naga
+
+- [glsl-out] Never emit `invariant gl_FragCoord` for an `@invariant @builtin(position)` fragment input (e.g. when the vertex output struct is reused as the fragment input). Only `gl_Position` is declared invariant; desktop GL drivers and GLSL ES reject the fragment-side declaration.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features
