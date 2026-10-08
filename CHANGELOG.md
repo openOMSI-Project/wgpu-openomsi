@@ -64,6 +64,16 @@ Bottom level categories:
 - Adapter enumeration skips (and logs) an adapter whose driver fails a query instead of panicking: Vulkan `vkEnumerateDeviceExtensionProperties`, DX12 `CheckFeatureSupport` (feature levels, architecture, options), EGL `eglMakeCurrent`. A failing `vkCreateDebugUtilsMessengerEXT` disables debug utils instead of panicking, and a GL driver failing to create the clear shader program fails `request_device` instead of panicking.
 - A driver failing to compile a shader no longer loses the device or panics. Vulkan: `vkCreateGraphicsPipelines`/`vkCreateComputePipelines`/`vkCreateShaderModule` failing with a code other than out-of-memory or device-lost (e.g. `VK_ERROR_UNKNOWN`, `VK_ERROR_INITIALIZATION_FAILED`) is reported as `CreateRenderPipelineError::Internal`/`CreateComputePipelineError::Internal`/`CreateShaderModuleError::Compilation` with the failed call and code. GLES: `glCreateShader`/`glCreateProgram` failures are reported as `Internal` pipeline errors and a uniform block the driver optimized away no longer panics. Out of memory while creating a shader module or pipeline is reported as an out-of-memory error without losing the device. New `CreateShaderModuleError::Compilation(String)` carries the backend's message (previously `Generation`, without it).
 - GLES (EGL and WGL): dropping an adapter, device or surface whose GL context can no longer be made current or not current (a lost context, a terminated display) logs the error instead of panicking in `Drop`; the GL context is leaked rather than dropped without being current.
+- A surface texture whose discard fails (dropped unpresented on a lost device or a surface already gone) logs the error instead of panicking. A shader translation error is logged as one line with the error in it (a crash reporter that keeps the last log line kept only "Please report it ..." before).
+- GLES: a shader compile or program link that fails without the driver giving a log (ANGLE on an old Direct3D 11 driver) says so in the error instead of an empty message.
+
+#### Backported from v30
+
+- Vulkan: don't wait for the `vkAcquireNextImage` fence on non-Windows targets (frame time spikes on NVIDIA drivers), with the v30.0.1 follow-up passing `vk::Fence::null` there (#9486, #9918).
+- Vulkan: `error_if_would_oom_on_resource_allocation` is more accurate, so fewer allocations are refused as out of memory that would have fit (#9643).
+- DX12: `textureNumLevels`, `textureNumLayers` and `textureNumSamples` return the right values in more cases (#9542).
+- Initialization tracking of 3D textures (#9765).
+- naga: loop-local `var` declarations without an initializer are zero-initialized in each iteration (#9592).
 
 ## v29.0.4 (2026-07-01)
 
