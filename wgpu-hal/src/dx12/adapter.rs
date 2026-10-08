@@ -1314,6 +1314,20 @@ impl crate::Adapter for super::Adapter {
         wgt::PresentationTimestamp(self.presentation_timer.get_timestamp_ns())
     }
 
+    unsafe fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo> {
+        let desc = unsafe { self.raw.GetDesc1() }.ok()?;
+        let local = self
+            .raw
+            .query_video_memory_info(Dxgi::DXGI_MEMORY_SEGMENT_GROUP_LOCAL)
+            .ok();
+        Some(wgt::AdapterMemoryInfo {
+            dedicated_bytes: desc.DedicatedVideoMemory as u64,
+            shared_bytes: desc.SharedSystemMemory as u64,
+            budget_bytes: local.map(|info| info.Budget),
+            usage_bytes: local.map(|info| info.CurrentUsage),
+        })
+    }
+
     fn get_ordered_buffer_usages(&self) -> wgt::BufferUses {
         wgt::BufferUses::INCLUSIVE | wgt::BufferUses::MAP_WRITE
     }

@@ -42,6 +42,10 @@ Bottom level categories:
 
 ## Unreleased
 
+### openOMSI fork
+
+- Add `Adapter::memory_info()`, returning the adapter's dedicated and shared memory sizes and, where the backend reports them, the current memory budget and usage (`AdapterMemoryInfo`). Implemented for Vulkan (memory heaps, `VK_EXT_memory_budget`), DX12 (DXGI adapter description, `QueryVideoMemoryInfo`) and Metal (`recommendedMaxWorkingSetSize`, `currentAllocatedSize`); `None` elsewhere.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features

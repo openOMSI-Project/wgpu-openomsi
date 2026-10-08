@@ -440,6 +440,25 @@ impl crate::Adapter for super::Adapter {
         wgt::PresentationTimestamp(timestamp)
     }
 
+    unsafe fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo> {
+        let device = &self.shared.device;
+        // https://developer.apple.com/documentation/metal/mtldevice/recommendedmaxworkingsetsize
+        if !device_class_responds_to(device, sel!(recommendedMaxWorkingSetSize)) {
+            return None;
+        }
+        let working_set = device.recommendedMaxWorkingSetSize();
+        // https://developer.apple.com/documentation/metal/mtldevice/currentallocatedsize
+        let usage_bytes = device_class_responds_to(device, sel!(currentAllocatedSize))
+            .then(|| device.currentAllocatedSize() as u64);
+        let unified = self.shared.private_caps.has_unified_memory.unwrap_or(false);
+        Some(wgt::AdapterMemoryInfo {
+            dedicated_bytes: if unified { 0 } else { working_set },
+            shared_bytes: if unified { working_set } else { 0 },
+            budget_bytes: Some(working_set),
+            usage_bytes,
+        })
+    }
+
     fn get_ordered_buffer_usages(&self) -> wgt::BufferUses {
         wgt::BufferUses::INCLUSIVE | wgt::BufferUses::MAP_WRITE
     }

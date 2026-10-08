@@ -219,4 +219,16 @@ impl Adapter {
     pub fn cooperative_matrix_properties(&self) -> Vec<CooperativeMatrixProperties> {
         self.inner.cooperative_matrix_properties()
     }
+
+    /// Returns the sizes of the memory available to this adapter, and the current budget
+    /// and usage where the backend reports them.
+    ///
+    /// wgpu doesn't use this itself; it is meant for sizing caches or picking quality
+    /// settings. The query is made anew on every call, so the budget and usage are current.
+    ///
+    /// Returns `None` if the backend can't tell, which includes GLES and WebGPU.
+    /// See [`AdapterMemoryInfo`] for what each backend reports.
+    pub fn memory_info(&self) -> Option<AdapterMemoryInfo> {
+        self.inner.memory_info()
+    }
 }

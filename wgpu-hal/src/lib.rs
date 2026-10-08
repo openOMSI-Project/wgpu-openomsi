@@ -795,6 +795,15 @@ pub trait Adapter: WasmNotSendSync {
     /// [`PresentationTimestamp`]: wgt::PresentationTimestamp
     unsafe fn get_presentation_timestamp(&self) -> wgt::PresentationTimestamp;
 
+    /// Returns the sizes of the memory available to the adapter, and the current budget and
+    /// usage where the backend reports them.
+    ///
+    /// `None` means the backend can't tell. See [`wgt::AdapterMemoryInfo`] for what each
+    /// backend reports.
+    unsafe fn memory_info(&self) -> Option<wgt::AdapterMemoryInfo> {
+        None
+    }
+
     /// The combination of all usages that the are guaranteed to be be ordered by the hardware.
     /// If a usage is ordered, then if the buffer state doesn't change between draw calls,
     /// there are no barriers needed for synchronization.

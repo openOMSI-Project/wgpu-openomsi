@@ -128,14 +128,14 @@ pub use backend::custom;
 
 pub use api::*;
 pub use wgt::{
-    AdapterInfo, AddressMode, AllocatorReport, AstcBlock, AstcChannel, Backend, BackendOptions,
-    Backends, BindGroupLayoutEntry, BindingType, BlendComponent, BlendFactor, BlendOperation,
-    BlendState, BufferAddress, BufferBindingType, BufferSize, BufferTextureCopyInfo,
-    BufferTransition, BufferUsages, BufferUses, Color, ColorTargetState, ColorWrites,
-    CommandBufferDescriptor, CompareFunction, CompositeAlphaMode, CooperativeMatrixProperties,
-    CooperativeScalarType, CopyExternalImageDestInfo, CoreCounters, DepthBiasState,
-    DepthStencilState, DeviceLostReason, DeviceType, DownlevelCapabilities, DownlevelFlags,
-    DownlevelLimits, Dx12BackendOptions, Dx12Compiler, Dx12SwapchainKind,
+    AdapterInfo, AdapterMemoryInfo, AddressMode, AllocatorReport, AstcBlock, AstcChannel, Backend,
+    BackendOptions, Backends, BindGroupLayoutEntry, BindingType, BlendComponent, BlendFactor,
+    BlendOperation, BlendState, BufferAddress, BufferBindingType, BufferSize,
+    BufferTextureCopyInfo, BufferTransition, BufferUsages, BufferUses, Color, ColorTargetState,
+    ColorWrites, CommandBufferDescriptor, CompareFunction, CompositeAlphaMode,
+    CooperativeMatrixProperties, CooperativeScalarType, CopyExternalImageDestInfo, CoreCounters,
+    DepthBiasState, DepthStencilState, DeviceLostReason, DeviceType, DownlevelCapabilities,
+    DownlevelFlags, DownlevelLimits, Dx12BackendOptions, Dx12Compiler, Dx12SwapchainKind,
     Dx12UseFrameLatencyWaitableObject, DxcShaderModel, DynamicOffset, ExperimentalFeatures,
     Extent3d, ExternalTextureFormat, ExternalTextureTransferFunction, Face, Features, FeaturesWGPU,
     FeaturesWebGPU, FilterMode, ForceShaderModelToken, FrontFace, GlBackendOptions, GlDebugFns,

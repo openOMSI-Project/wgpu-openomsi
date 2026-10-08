@@ -137,6 +137,10 @@ pub trait AdapterInterface: CommonTraits {
     fn get_presentation_timestamp(&self) -> crate::PresentationTimestamp;
 
     fn cooperative_matrix_properties(&self) -> Vec<crate::wgt::CooperativeMatrixProperties>;
+
+    fn memory_info(&self) -> Option<crate::AdapterMemoryInfo> {
+        None
+    }
 }
 
 pub trait DeviceInterface: CommonTraits {

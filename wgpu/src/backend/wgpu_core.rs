@@ -995,6 +995,10 @@ impl dispatch::AdapterInterface for CoreAdapter {
         self.context.0.adapter_get_presentation_timestamp(self.id)
     }
 
+    fn memory_info(&self) -> Option<crate::AdapterMemoryInfo> {
+        self.context.0.adapter_memory_info(self.id)
+    }
+
     fn cooperative_matrix_properties(&self) -> Vec<crate::wgt::CooperativeMatrixProperties> {
         self.context
             .0
