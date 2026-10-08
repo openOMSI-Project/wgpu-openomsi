@@ -631,6 +631,47 @@ impl Device {
         unsafe { device.context.device_as_hal::<A>(device) }
     }
 
+    /// Get the [`wgpu_hal`] fence that this `Device`'s queue signals on every submission.
+    ///
+    /// After [`Queue::submit`] returns a [`SubmissionIndex`], the GPU sets the fence to
+    /// [`SubmissionIndex::hal_fence_value`] once that submission has completed. Another API
+    /// can wait on the raw fence for exactly that value, instead of the application blocking
+    /// in [`Device::poll`]. On DX12, `wgpu_hal::dx12::Fence::raw_fence` gives the
+    /// `ID3D12Fence`, for example for `ID3D12CommandQueue::Wait` on another queue.
+    ///
+    /// Returns a guard that dereferences to the type of the hal backend
+    /// which implements [`A::Fence`].
+    ///
+    /// # Types
+    ///
+    /// The returned type depends on the backend:
+    ///
+    #[doc = crate::macros::hal_type_vulkan!("Fence")]
+    #[doc = crate::macros::hal_type_metal!("Fence")]
+    #[doc = crate::macros::hal_type_dx12!("Fence")]
+    #[doc = crate::macros::hal_type_gles!("Fence")]
+    ///
+    /// # Errors
+    ///
+    /// This method will return None if:
+    /// - The device is not from the backend specified by `A`.
+    /// - The device is from the `webgpu` or `custom` backend.
+    ///
+    /// # Safety
+    ///
+    /// - The guard holds the device's fence lock: drop it before calling [`Queue::submit`]
+    ///   or [`Device::poll`] on this thread, or they deadlock. A raw handle cloned out of it
+    ///   (a COM reference on DX12) may be kept.
+    /// - The fence must not be signalled, reset or destroyed by anyone but wgpu.
+    /// - All the safety requirements of wgpu-hal must be upheld.
+    ///
+    /// [`A::Fence`]: hal::Api::Fence
+    #[cfg(wgpu_core)]
+    pub unsafe fn as_hal_fence<A: hal::Api>(&self) -> Option<impl Deref<Target = A::Fence>> {
+        let device = self.inner.as_core_opt()?;
+        unsafe { device.context.device_fence_as_hal::<A>(device) }
+    }
+
     /// Destroy this device.
     pub fn destroy(&self) {
         self.inner.destroy()

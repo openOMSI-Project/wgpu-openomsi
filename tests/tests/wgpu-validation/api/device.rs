@@ -42,3 +42,19 @@ fn recursive_uncaptured_error() {
 
     assert_eq!(errors_seen.load(Relaxed), 2);
 }
+
+/// Test that the device's hal fence reaches a submission's fence value once it completes.
+#[test]
+fn hal_fence_value() {
+    use wgpu_hal::Device as _;
+
+    let (device, queue) = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
+    let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+    let index = queue.submit([encoder.finish()]);
+
+    let hal_device = unsafe { device.as_hal::<wgpu_hal::api::Noop>() }.unwrap();
+    let fence = unsafe { device.as_hal_fence::<wgpu_hal::api::Noop>() }.unwrap();
+    // Noop commands complete as they are submitted.
+    let value = unsafe { hal_device.get_fence_value(&fence) }.unwrap();
+    assert_eq!(value, index.hal_fence_value());
+}

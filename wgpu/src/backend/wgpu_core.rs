@@ -208,6 +208,13 @@ impl ContextWgpuCore {
         unsafe { self.0.device_as_hal::<A>(device.id) }
     }
 
+    pub unsafe fn device_fence_as_hal<A: hal::Api>(
+        &self,
+        device: &CoreDevice,
+    ) -> Option<impl Deref<Target = A::Fence>> {
+        unsafe { self.0.device_fence_as_hal::<A>(device.id) }
+    }
+
     pub unsafe fn surface_as_hal<A: hal::Api>(
         &self,
         surface: &CoreSurface,

@@ -46,6 +46,7 @@ Bottom level categories:
 
 - Add `Adapter::memory_info()`, returning the adapter's dedicated and shared memory sizes and, where the backend reports them, the current memory budget and usage (`AdapterMemoryInfo`). Implemented for Vulkan (memory heaps, `VK_EXT_memory_budget`), DX12 (DXGI adapter description, `QueryVideoMemoryInfo`) and Metal (`recommendedMaxWorkingSetSize`, `currentAllocatedSize`); `None` elsewhere.
 - Add `Device::create_texture_from_hal_with_uses()`, which tracks a texture created from a hal texture from the given `TextureUses` instead of `UNINITIALIZED`, for textures another API hands over in a known state (e.g. OpenXR swapchain images in `D3D12_RESOURCE_STATE_RENDER_TARGET`).
+- Add `Device::as_hal_fence()` and `SubmissionIndex::hal_fence_value()`, so that another API can wait on the device's hal fence (e.g. the `ID3D12Fence` on DX12) for exactly one submission instead of the application polling the device.
 
 ## v29.0.4 (2026-07-01)
 
