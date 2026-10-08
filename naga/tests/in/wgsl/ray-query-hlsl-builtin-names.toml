@@ -1,0 +1,7 @@
+capabilities = "RAY_QUERY"
+targets = "HLSL"
+
+[hlsl]
+shader_model = "V6_5"
+fake_missing_bindings = true
+zero_initialize_workgroup_memory = true

@@ -36,7 +36,14 @@ RayDesc RayDescFromRayDesc_(RayDesc_ arg0) {
     return ret;
 }
 
+static const uint RAY_FLAG_CULL_BACK_FACING_TRIANGLES_ = 16u;
+static const uint RAY_FLAG_FORCE_NON_OPAQUE_ = 2u;
+static const uint COMMITTED_TRIANGLE_HIT_ = 1u;
+static const uint CANDIDATE_NON_OPAQUE_TRIANGLE_ = 0u;
+static const uint HIT_KIND_TRIANGLE_FRONT_FACE_ = 254u;
+
 RaytracingAccelerationStructure acc_struct : register(t0);
+RWByteAddressBuffer output : register(u1);
 
 RayDesc_ ConstructRayDesc_(uint arg0, uint arg1, float arg2, float arg3, float3 arg4, float3 arg5) {
     RayDesc_ ret = (RayDesc_)0;
@@ -49,39 +56,37 @@ RayDesc_ ConstructRayDesc_(uint arg0, uint arg1, float arg2, float arg3, float3 
     return ret;
 }
 
-RayIntersection GetCandidateIntersection(RayQuery<RAY_FLAG_NONE> rq, uint rq_tracker) {
+RayIntersection GetCommittedIntersection(RayQuery<RAY_FLAG_NONE> rq, uint rq_tracker) {
     RayIntersection ret = (RayIntersection)0;
-    if (((rq_tracker & 2) == 2) && !((rq_tracker & 4) == 4)) {
-        CANDIDATE_TYPE kind = rq.CandidateType();
-        if (kind == CANDIDATE_NON_OPAQUE_TRIANGLE) {
-            ret.kind = 1;
-            ret.t = rq.CandidateTriangleRayT();
-            ret.barycentrics = rq.CandidateTriangleBarycentrics();
-            ret.front_face = rq.CandidateTriangleFrontFace();
-        } else {
-            ret.kind = 3;
+    if (((rq_tracker & 4) == 4)) {
+        ret.kind = rq.CommittedStatus();
+        if( rq.CommittedStatus() == COMMITTED_NOTHING) {} else {
+            ret.t = rq.CommittedRayT();
+            ret.instance_custom_data = rq.CommittedInstanceID();
+            ret.instance_index = rq.CommittedInstanceIndex();
+            ret.sbt_record_offset = rq.CommittedInstanceContributionToHitGroupIndex();
+            ret.geometry_index = rq.CommittedGeometryIndex();
+            ret.primitive_index = rq.CommittedPrimitiveIndex();
+            if( rq.CommittedStatus() == COMMITTED_TRIANGLE_HIT ) {
+                ret.barycentrics = rq.CommittedTriangleBarycentrics();
+                ret.front_face = rq.CommittedTriangleFrontFace();
+            }
+            ret.object_to_world = rq.CommittedObjectToWorld4x3();
+            ret.world_to_object = rq.CommittedWorldToObject4x3();
         }
-        ret.instance_custom_data = rq.CandidateInstanceID();
-        ret.instance_index = rq.CandidateInstanceIndex();
-        ret.sbt_record_offset = rq.CandidateInstanceContributionToHitGroupIndex();
-        ret.geometry_index = rq.CandidateGeometryIndex();
-        ret.primitive_index = rq.CandidatePrimitiveIndex();
-        ret.object_to_world = rq.CandidateObjectToWorld4x3();
-        ret.world_to_object = rq.CandidateWorldToObject4x3();
     }
     return ret;
 }
 
 [numthreads(1, 1, 1)]
-void main_candidate()
+void main()
 {
-    RayQuery<RAY_FLAG_NONE> rq_1;
-    uint naga_query_init_tracker_for_rq_1 = 0;
+    RayQuery<RAY_FLAG_NONE> rq;
+    uint naga_query_init_tracker_for_rq = 0;
+    uint hit = CANDIDATE_NON_OPAQUE_TRIANGLE_;
 
-    float3 pos = (0.0).xxx;
-    float3 dir = float3(0.0, 1.0, 0.0);
     {
-        RayDesc_ naga_desc = ConstructRayDesc_(4u, 255u, 0.1, 100.0, pos, dir);
+        RayDesc_ naga_desc = ConstructRayDesc_(18u, 255u, 0.1, 100.0, (0.0).xxx, float3(0.0, 1.0, 0.0));
         float naga_tmin = naga_desc.tmin;
         float naga_tmax = naga_desc.tmax;
         float3 naga_origin = naga_desc.origin;
@@ -102,35 +107,37 @@ void main_candidate()
         bool naga_contains_skip_triangles_aabbs =  (naga_contains_skip_aabbs && naga_contains_skip_triangles) ;
         bool naga_contains_skip_triangles_cull =  (naga_contains_cull_front && naga_contains_skip_triangles) || (naga_contains_cull_front && naga_contains_cull_back) || (naga_contains_cull_back && naga_contains_skip_triangles) ;
         bool naga_contains_multiple_opaque =  (naga_contains_cull_no_opaque && naga_contains_opaque) || (naga_contains_cull_no_opaque && naga_contains_no_opaque) || (naga_contains_cull_no_opaque && naga_contains_cull_opaque) || (naga_contains_cull_opaque && naga_contains_opaque) || (naga_contains_cull_opaque && naga_contains_no_opaque) || (naga_contains_no_opaque && naga_contains_opaque) ;
-        naga_query_init_tracker_for_rq_1 = 0;
+        naga_query_init_tracker_for_rq = 0;
         if (naga_tmin_valid && naga_tmax_valid && naga_origin_valid && naga_dir_valid && !(naga_contains_skip_triangles_aabbs || naga_contains_skip_triangles_cull || naga_contains_multiple_opaque)) {
-            naga_query_init_tracker_for_rq_1 = 1;
-            rq_1.TraceRayInline(acc_struct, naga_desc.flags, naga_desc.cull_mask, RayDescFromRayDesc_(naga_desc));
+            naga_query_init_tracker_for_rq = 1;
+            rq.TraceRayInline(acc_struct, naga_desc.flags, naga_desc.cull_mask, RayDescFromRayDesc_(naga_desc));
         }
     }
-    RayIntersection intersection = GetCandidateIntersection(rq_1, naga_query_init_tracker_for_rq_1);
-    if ((intersection.kind == 3u)) {
-        if (((naga_query_init_tracker_for_rq_1 & 2) == 2) && !((naga_query_init_tracker_for_rq_1 & 4) == 4)) {
-            CANDIDATE_TYPE naga_kind = rq_1.CandidateType();
-            float naga_tmin = rq_1.RayTMin();
-            float naga_tcurrentmax = rq_1.CommittedRayT();
-            if ((naga_kind == CANDIDATE_PROCEDURAL_PRIMITIVE) && (naga_tmin <=10.0) && (10.0 <= naga_tcurrentmax)) {
-                rq_1.CommitProceduralPrimitiveHit(10.0);
+    uint2 loop_bound = uint2(4294967295u, 4294967295u);
+    while(true) {
+        if (all(loop_bound == uint2(0u, 0u))) { break; }
+        loop_bound -= uint2(loop_bound.y == 0u, 1u);
+        bool _e13 = false;
+        {
+            bool naga_has_initialized = ((naga_query_init_tracker_for_rq & 1) == 1);
+            bool naga_has_finished = ((naga_query_init_tracker_for_rq & 4) == 4);
+            if (naga_has_initialized && !naga_has_finished) {
+                _e13 = rq.Proceed();
+                naga_query_init_tracker_for_rq = naga_query_init_tracker_for_rq | 2;
+                if (!_e13) { naga_query_init_tracker_for_rq = naga_query_init_tracker_for_rq | 4; }
         }}
-        return;
-    } else {
-        if ((intersection.kind == 1u)) {
-            if (((naga_query_init_tracker_for_rq_1 & 2) == 2) && !((naga_query_init_tracker_for_rq_1 & 4) == 4)) {
-                CANDIDATE_TYPE naga_kind = rq_1.CandidateType();
-                if (naga_kind == CANDIDATE_NON_OPAQUE_TRIANGLE) {
-                    rq_1.CommitNonOpaqueTriangleHit();
-            }}
-            return;
+        if (_e13) {
         } else {
-            if (((naga_query_init_tracker_for_rq_1 & 1) == 1)) {
-                rq_1.Abort();
-            }
-            return;
+            break;
+        }
+        {
         }
     }
+    RayIntersection intersection = GetCommittedIntersection(rq, naga_query_init_tracker_for_rq);
+    if ((intersection.kind == COMMITTED_TRIANGLE_HIT_)) {
+        hit = HIT_KIND_TRIANGLE_FRONT_FACE_;
+    }
+    uint _e22 = hit;
+    output.Store(0, asuint(_e22));
+    return;
 }

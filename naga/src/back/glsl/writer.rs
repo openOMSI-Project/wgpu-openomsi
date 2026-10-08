@@ -1018,8 +1018,7 @@ impl<'a, W: Write> Writer<'a, W> {
     /// Emit nothing for entry point arguments or return values with [`BuiltIn`]
     /// bindings; `main` will read from or assign to the appropriate GLSL
     /// special variable; these are pre-declared. As an exception, we do declare
-    /// `gl_Position` or `gl_FragCoord` with the `invariant` qualifier if
-    /// needed.
+    /// `gl_Position` with the `invariant` qualifier if needed.
     ///
     /// Use `output` together with [`self.entry_point.stage`] to determine which
     /// shader stages are being connected, and choose the `in` or `out` storage
@@ -1059,29 +1058,22 @@ impl<'a, W: Write> Writer<'a, W> {
             crate::Binding::BuiltIn(built_in) => {
                 match built_in {
                     crate::BuiltIn::Position { invariant: true } => {
-                        match (self.options.version, self.entry_point.stage) {
-                            (
-                                Version::Embedded {
-                                    version: 300,
-                                    is_webgl: true,
-                                },
-                                ShaderStage::Fragment,
-                            ) => {
-                                // `invariant gl_FragCoord` is not allowed in WebGL2 and possibly
-                                // OpenGL ES in general (waiting on confirmation).
-                                //
-                                // See https://github.com/KhronosGroup/WebGL/issues/3518
-                            }
-                            _ => {
-                                writeln!(
-                                    self.out,
-                                    "invariant {};",
-                                    glsl_built_in(
-                                        built_in,
-                                        VaryingOptions::from_writer_options(self.options, output)
-                                    )
-                                )?;
-                            }
+                        // Only the `gl_Position` output can be made invariant.
+                        //
+                        // `invariant gl_FragCoord` is rejected by GLSL ES (including
+                        // WebGL2, see https://github.com/KhronosGroup/WebGL/issues/3518)
+                        // and by some desktop GL drivers. It has no effect anyway, so
+                        // never emit it for fragment shader inputs, which happens when
+                        // the vertex output struct is reused as the fragment input.
+                        if output {
+                            writeln!(
+                                self.out,
+                                "invariant {};",
+                                glsl_built_in(
+                                    built_in,
+                                    VaryingOptions::from_writer_options(self.options, output)
+                                )
+                            )?;
                         }
                     }
                     crate::BuiltIn::ClipDistance => {

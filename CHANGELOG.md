@@ -42,6 +42,14 @@ Bottom level categories:
 
 ## Unreleased
 
+### openOMSI fork
+
+#### naga
+
+- [glsl-out] Never emit `invariant gl_FragCoord` for an `@invariant @builtin(position)` fragment input (e.g. when the vertex output struct is reused as the fragment input). Only `gl_Position` is declared invariant; desktop GL drivers and GLSL ES reject the fragment-side declaration.
+- [hlsl-out] Reserve DXC's built-in ray tracing names (`RAY_FLAG_*`, `COMMITTED_*`, `CANDIDATE_*`, `HIT_KIND_*`, `RAYTRACING_PIPELINE_FLAG_*`), so user identifiers with these names are renamed instead of redefining the built-ins.
+- [hlsl-out, spv-out] Reset a ray query's initialization tracker when the query is initialized again. In HLSL, a query initialized again after finishing a traversal (e.g. in a loop) never proceeded again and always reported no hit; in SPIR-V, an invalid re-initialization kept the previous traversal's state.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features

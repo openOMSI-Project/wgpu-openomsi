@@ -1023,6 +1023,16 @@ impl Writer {
             );
         }
 
+        // The query was not (re-)initialized: forget any earlier traversal, so its
+        // results are not read as if they belonged to this initialization.
+        let const_uninitialized =
+            self.get_constant_scalar(crate::Literal::U32(RayQueryPoint::empty().bits()));
+        invalid_block.body.push(Instruction::store(
+            init_tracker_id,
+            const_uninitialized,
+            None,
+        ));
+
         function.consume(invalid_block, Instruction::branch(merge_label_id));
 
         function.consume(merge_block, Instruction::return_void());
