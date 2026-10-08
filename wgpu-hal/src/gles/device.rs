@@ -217,6 +217,9 @@ impl super::Device {
             }
             Ok(raw)
         } else {
+            // (some drivers - ANGLE on an old Direct3D 11 one - fail without a word: say so,
+            // the error read "Internal error in VERTEX shader:" and nothing after it)
+            let msg = if msg.trim().is_empty() { "the driver compiled it with an error and gave no log".to_string() } else { msg };
             log::error!("\tShader compilation failed: {msg}");
             unsafe { gl.delete_shader(raw) };
             Err(crate::PipelineError::Linkage(
@@ -468,6 +471,8 @@ impl super::Device {
         let linked_ok = unsafe { gl.get_program_link_status(program) };
         let msg = unsafe { gl.get_program_info_log(program) };
         if !linked_ok {
+            let msg = if msg.trim().is_empty() { "the driver failed to link the program and gave no log".to_string() } else { msg };
+            log::error!("\tProgram link failed: {msg}");
             return Err(crate::PipelineError::Linkage(has_stages, msg));
         }
         if !msg.is_empty() {

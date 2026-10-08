@@ -42,7 +42,6 @@ webgpu:api,validation,image_copy,buffer_texture_copies:* // https://github.com/g
 webgpu:api,validation,layout_shader_compat:pipeline_layout_shader_exact_match:* // dx12, https://bugzilla.mozilla.org/show_bug.cgi?id=2017725
 webgpu:api,validation,non_filterable_texture:non_filterable_texture_with_filtering_sampler:* // 80%, depth textures with filtering samplers
 webgpu:api,validation,query_set,create:count:* // 0%, wgpu incorrectly rejects zero-count query sets
-webgpu:api,validation,queue,buffer_mapped:* // ***, vulkan
 webgpu:api,validation,queue,destroyed,* // 71%, writeBuffer/writeTexture return value, destroyed query set
 webgpu:api,validation,queue,writeBuffer:ranges:* // 0%, missing OperationError for invalid ranges
 webgpu:api,validation,render_pass,attachment_compatibility:render_pass_or_bundle_and_pipeline,depth_stencil_read_only_write_state:* // fails on dx12
@@ -65,6 +64,7 @@ webgpu:api,validation,state,device_lost,destroy:* // crash
 webgpu:api,validation,texture,destroy:submit_a_destroyed_texture_as_attachment:* // 44%, https://github.com/gfx-rs/wgpu/issues/8714
 
 webgpu:shader,execution,expression,call,builtin,atan2:f16:* // dx12, fails with dxc, passes with fxc, https://github.com/gfx-rs/wgpu/issues/9179
+webgpu:shader,execution,expression,call,builtin,textureDimensions:* // dx12, https://github.com/gfx-rs/wgpu/issues/9541
 
 webgpu:shader,validation,decl,context_dependent_resolution:* // 92%, f16 as reserved keyword when enabled
 webgpu:shader,validation,decl,let:* // texture/sampler let
