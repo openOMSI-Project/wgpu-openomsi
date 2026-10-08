@@ -223,7 +223,8 @@ impl PipelineCacheHeader {
 
 fn adapter_key(adapter: &AdapterInfo) -> Result<[u8; 15], PipelineCacheValidationError> {
     match adapter.backend {
-        wgt::Backend::Vulkan => {
+        // (GL: the hal's validation key tells the driver apart; vendor and device are 0)
+        wgt::Backend::Vulkan | wgt::Backend::Gl => {
             // If these change size, the header format needs to change
             // We set the type explicitly so this won't compile in that case
             let v: [u8; 4] = adapter.vendor.to_be_bytes();
