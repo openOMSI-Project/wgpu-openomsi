@@ -192,7 +192,12 @@ impl super::Device {
             | naga::ShaderStage::Miss => unreachable!(),
         };
 
-        let raw = unsafe { gl.create_shader(target) }.unwrap();
+        let raw = unsafe { gl.create_shader(target) }.map_err(|e| {
+            crate::PipelineError::Linkage(
+                map_naga_stage(naga_stage),
+                format!("glCreateShader failed: {e}"),
+            )
+        })?;
         #[cfg(native)]
         if gl.supports_debug() {
             let name = raw.0.get();
@@ -392,7 +397,14 @@ impl super::Device {
             naga::back::glsl::Version::Embedded { version, .. } => format!("{version} es"),
             naga::back::glsl::Version::Desktop(version) => format!("{version}"),
         };
-        let program = unsafe { gl.create_program() }.unwrap();
+        let program = unsafe { gl.create_program() }.map_err(|e| {
+            let stages = shaders
+                .iter()
+                .fold(wgt::ShaderStages::empty(), |stages, &(naga_stage, _)| {
+                    stages | map_naga_stage(naga_stage)
+                });
+            crate::PipelineError::Linkage(stages, format!("glCreateProgram failed: {e}"))
+        })?;
         #[cfg(native)]
         if let Some(label) = label {
             if private_caps.contains(PrivateCapabilities::DEBUG_FNS) {
@@ -470,7 +482,12 @@ impl super::Device {
                 log::trace!("Get binding {name:?} from program {program:?}");
                 match register {
                     super::BindingRegister::UniformBuffers => {
-                        let index = unsafe { gl.get_uniform_block_index(program, name) }.unwrap();
+                        // The driver may have optimized the block away.
+                        let Some(index) = (unsafe { gl.get_uniform_block_index(program, name) })
+                        else {
+                            log::debug!("\tUniform block {name:?} is not active");
+                            continue;
+                        };
                         log::trace!("\tBinding slot {slot} to block index {index}");
                         unsafe { gl.uniform_block_binding(program, index, slot as _) };
                     }

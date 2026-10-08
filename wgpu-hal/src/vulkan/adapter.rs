@@ -1745,14 +1745,24 @@ impl PhysicalDeviceProperties {
 }
 
 impl super::InstanceShared {
+    /// Returns `None` if the driver fails to report the device's extensions.
     fn inspect(
         &self,
         phd: vk::PhysicalDevice,
-    ) -> (PhysicalDeviceProperties, PhysicalDeviceFeatures) {
+    ) -> Option<(PhysicalDeviceProperties, PhysicalDeviceFeatures)> {
         let capabilities = {
             let mut capabilities = PhysicalDeviceProperties::default();
             capabilities.supported_extensions =
-                unsafe { self.raw.enumerate_device_extension_properties(phd).unwrap() };
+                match unsafe { self.raw.enumerate_device_extension_properties(phd) } {
+                    Ok(extensions) => extensions,
+                    Err(err) => {
+                        log::warn!(
+                            "Skipping physical device {phd:?}: \
+                            vkEnumerateDeviceExtensionProperties failed: {err}"
+                        );
+                        return None;
+                    }
+                };
             capabilities.properties = unsafe { self.raw.get_physical_device_properties(phd) };
             capabilities.device_api_version = capabilities.properties.api_version;
 
@@ -2090,7 +2100,7 @@ impl super::InstanceShared {
             unsafe { self.raw.get_physical_device_features(phd) }
         };
 
-        (capabilities, features)
+        Some((capabilities, features))
     }
 }
 
@@ -2101,7 +2111,7 @@ impl super::Instance {
     ) -> Option<crate::ExposedAdapter<super::Api>> {
         use crate::auxil::db;
 
-        let (phd_capabilities, phd_features) = self.shared.inspect(phd);
+        let (phd_capabilities, phd_features) = self.shared.inspect(phd)?;
 
         let mem_properties = {
             profiling::scope!("vkGetPhysicalDeviceMemoryProperties");

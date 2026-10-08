@@ -136,7 +136,9 @@ impl<'a> core::ops::Deref for AdapterContextLock<'a> {
 impl<'a> Drop for AdapterContextLock<'a> {
     fn drop(&mut self) {
         if let Some(wgl) = &self.inner.context {
-            wgl.unmake_current().unwrap()
+            if let Err(err) = wgl.unmake_current() {
+                log::error!("Failed to make WGL context not current: {err}");
+            }
         }
     }
 }
@@ -180,7 +182,9 @@ impl Drop for Inner {
         struct CurrentGuard<'a>(&'a WglContext);
         impl Drop for CurrentGuard<'_> {
             fn drop(&mut self) {
-                self.0.unmake_current().unwrap();
+                if let Err(err) = self.0.unmake_current() {
+                    log::error!("Failed to make WGL context not current: {err}");
+                }
             }
         }
 
@@ -190,10 +194,18 @@ impl Drop for Inner {
         // NOTE: This is only set to `None` by `Adapter::new_external` which
         // requires the context to be current when anything that may be holding
         // the `Arc<AdapterShared>` is dropped.
-        let _guard = self.context.as_ref().map(|wgl| {
-            wgl.make_current(self.device.dc).unwrap();
-            CurrentGuard(wgl)
-        });
+        let _guard = match self.context.as_ref() {
+            Some(wgl) => match wgl.make_current(self.device.dc) {
+                Ok(()) => Some(CurrentGuard(wgl)),
+                Err(err) => {
+                    // The context can't be made current (for example it was lost):
+                    // leak the GL context rather than drop it without a current context.
+                    log::error!("Failed to make WGL context current to drop it: {err}");
+                    return;
+                }
+            },
+            None => None,
+        };
         // SAFETY: Field not used after this.
         unsafe { ManuallyDrop::drop(&mut self.gl) };
     }

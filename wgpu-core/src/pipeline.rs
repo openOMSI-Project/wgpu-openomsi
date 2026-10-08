@@ -119,6 +119,9 @@ pub enum CreateShaderModuleError {
     ParsingSpirV(#[from] ShaderError<naga::front::spv::Error>),
     #[error("Failed to generate the backend-specific code")]
     Generation,
+    /// The backend or driver failed to compile the shader.
+    #[error("Failed to compile the shader: {0}")]
+    Compilation(String),
     #[error(transparent)]
     Device(#[from] DeviceError),
     #[error(transparent)]
@@ -143,7 +146,7 @@ impl WebGpuError for CreateShaderModuleError {
             Self::Device(e) => e.webgpu_error_type(),
             Self::MissingFeatures(e) => e.webgpu_error_type(),
 
-            Self::Generation => ErrorType::Internal,
+            Self::Generation | Self::Compilation(_) => ErrorType::Internal,
 
             Self::Validation(..) | Self::InvalidGroupIndex { .. } => ErrorType::Validation,
             #[cfg(feature = "wgsl")]

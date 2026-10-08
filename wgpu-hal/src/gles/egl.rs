@@ -181,15 +181,18 @@ struct EglContext {
 
 impl EglContext {
     fn make_current(&self) {
+        self.try_make_current().unwrap();
+    }
+
+    fn try_make_current(&self) -> Result<(), khronos_egl::Error> {
         self.instance
             .make_current(self.display, self.pbuffer, self.pbuffer, Some(self.raw))
-            .unwrap();
     }
 
     fn unmake_current(&self) {
-        self.instance
-            .make_current(self.display, None, None, None)
-            .unwrap();
+        if let Err(err) = self.instance.make_current(self.display, None, None, None) {
+            log::error!("Failed to make EGL context not current: {err:?}");
+        }
     }
 }
 
@@ -253,10 +256,18 @@ impl Drop for AdapterContext {
         // NOTE: This is only set to `None` by `Adapter::new_external` which
         // requires the context to be current when anything that may be holding
         // the `Arc<AdapterShared>` is dropped.
-        let _guard = self.egl.as_ref().map(|egl| {
-            egl.make_current();
-            CurrentGuard(egl)
-        });
+        let _guard = match self.egl.as_ref() {
+            Some(egl) => match egl.try_make_current() {
+                Ok(()) => Some(CurrentGuard(egl)),
+                Err(err) => {
+                    // The context can't be made current (for example it was lost):
+                    // leak the GL context rather than drop it without a current context.
+                    log::error!("Failed to make EGL context current to drop it: {err:?}");
+                    return;
+                }
+            },
+            None => None,
+        };
         let glow = self.glow.get_mut();
         // SAFETY: Field not used after this.
         unsafe { ManuallyDrop::drop(glow) };
@@ -1003,7 +1014,10 @@ impl crate::Instance for Instance {
         _surface_hint: Option<&Surface>,
     ) -> Vec<crate::ExposedAdapter<super::Api>> {
         let inner = self.inner.lock();
-        inner.egl.make_current();
+        if let Err(err) = inner.egl.try_make_current() {
+            log::error!("Failed to make EGL context current, no adapter exposed: {err:?}");
+            return Vec::new();
+        }
 
         let mut gl = unsafe {
             glow::Context::from_loader_function(|name| {
@@ -1437,10 +1451,9 @@ impl crate::Surface for Surface {
 
     unsafe fn unconfigure(&self, device: &super::Device) {
         if let Some((surface, wl_window)) = unsafe { self.unconfigure_impl(device) } {
-            self.egl
-                .instance
-                .destroy_surface(self.egl.display, surface)
-                .unwrap();
+            if let Err(err) = self.egl.instance.destroy_surface(self.egl.display, surface) {
+                log::error!("Failed to destroy EGL surface: {err:?}");
+            }
             if let Some(window) = wl_window {
                 wayland_sys::ffi_dispatch!(
                     wayland_sys::egl::wayland_egl_handle(),

@@ -968,7 +968,13 @@ impl super::Adapter {
                 format!("#version 140\n{source}")
             }
         };
-        let shader = unsafe { gl.create_shader(shader_type) }.expect("Could not create shader");
+        let shader = match unsafe { gl.create_shader(shader_type) } {
+            Ok(shader) => shader,
+            Err(err) => {
+                log::error!("Could not create shader: {err}");
+                return None;
+            }
+        };
         unsafe { gl.shader_source(shader, &source) };
         unsafe { gl.compile_shader(shader) };
 
@@ -988,7 +994,13 @@ impl super::Adapter {
         gl: &glow::Context,
         es: bool,
     ) -> Option<ShaderClearProgram> {
-        let program = unsafe { gl.create_program() }.expect("Could not create shader program");
+        let program = match unsafe { gl.create_program() } {
+            Ok(program) => program,
+            Err(err) => {
+                log::error!("Could not create shader program: {err}");
+                return None;
+            }
+        };
         let vertex = unsafe {
             Self::compile_shader(
                 include_str!("./shaders/clear.vert"),
@@ -1018,10 +1030,14 @@ impl super::Adapter {
             return None;
         }
 
-        let color_uniform_location = unsafe { gl.get_uniform_location(program, "color") }
-            .expect("Could not find color uniform in shader clear shader");
+        let color_uniform_location = unsafe { gl.get_uniform_location(program, "color") };
         unsafe { gl.delete_shader(vertex) };
         unsafe { gl.delete_shader(fragment) };
+        let Some(color_uniform_location) = color_uniform_location else {
+            log::error!("Could not find color uniform in shader clear shader");
+            unsafe { gl.delete_program(program) };
+            return None;
+        };
 
         Some(ShaderClearProgram {
             program,

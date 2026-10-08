@@ -555,6 +555,7 @@ pub struct CoreCommandBuffer {
 pub struct CoreRenderBundleEncoder {
     pub(crate) context: ContextWgpuCore,
     encoder: wgc::command::RenderBundleEncoder,
+    error_sink: ErrorSink,
     id: crate::cmp::Identifier,
 }
 
@@ -712,11 +713,11 @@ impl From<CreateShaderModuleError> for CompilationInfo {
             CreateShaderModuleError::Validation(v) => v.into(),
             // Device errors are reported through the error sink, and are not compilation errors.
             // Same goes for native shader module generation errors.
-            CreateShaderModuleError::Device(_) | CreateShaderModuleError::Generation => {
-                CompilationInfo {
-                    messages: Vec::new(),
-                }
-            }
+            CreateShaderModuleError::Device(_)
+            | CreateShaderModuleError::Generation
+            | CreateShaderModuleError::Compilation(_) => CompilationInfo {
+                messages: Vec::new(),
+            },
             // Everything else is an error message without location information.
             _ => CompilationInfo {
                 messages: vec![CompilationMessage {
@@ -1830,6 +1831,7 @@ impl dispatch::DeviceInterface for CoreDevice {
         CoreRenderBundleEncoder {
             context: self.context.clone(),
             encoder,
+            error_sink: Arc::clone(&self.error_sink),
             id: crate::cmp::Identifier::create(),
         }
         .into()
@@ -3858,8 +3860,12 @@ impl dispatch::RenderBundleEncoderInterface for CoreRenderBundleEncoder {
             None,
         );
         if let Some(err) = error {
-            self.context
-                .handle_error_fatal(err, "RenderBundleEncoder::finish");
+            self.context.handle_error(
+                &self.error_sink,
+                err,
+                desc.label,
+                "RenderBundleEncoder::finish",
+            );
         }
         CoreRenderBundle {
             context: self.context.clone(),

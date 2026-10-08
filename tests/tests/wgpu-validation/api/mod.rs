@@ -9,5 +9,6 @@ mod error_scopes;
 mod experimental;
 mod external_texture;
 mod instance;
+mod render_bundle;
 mod render_pipeline;
 mod texture;

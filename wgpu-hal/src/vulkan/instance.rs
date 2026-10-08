@@ -339,14 +339,19 @@ impl super::Instance {
 
                 let extension = ext::debug_utils::Instance::new(&entry, &raw_instance);
                 let vk_info = debug_utils_create_info.to_vk_create_info();
-                let messenger =
-                    unsafe { extension.create_debug_utils_messenger(&vk_info, None) }.unwrap();
-
-                Some(super::DebugUtils {
-                    extension,
-                    messenger,
-                    callback_data: debug_utils_create_info.callback_data,
-                })
+                match unsafe { extension.create_debug_utils_messenger(&vk_info, None) } {
+                    Ok(messenger) => Some(super::DebugUtils {
+                        extension,
+                        messenger,
+                        callback_data: debug_utils_create_info.callback_data,
+                    }),
+                    Err(err) => {
+                        log::warn!(
+                            "Debug utils not enabled: vkCreateDebugUtilsMessengerEXT failed: {err}"
+                        );
+                        None
+                    }
+                }
             } else {
                 log::debug!("Debug utils not enabled: extension not listed");
                 None

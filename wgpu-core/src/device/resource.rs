@@ -2383,12 +2383,12 @@ impl Device {
             Ok(raw) => raw,
             Err(error) => {
                 return Err(match error {
-                    hal::ShaderError::Device(error) => {
-                        pipeline::CreateShaderModuleError::Device(self.handle_hal_error(error))
-                    }
-                    hal::ShaderError::Compilation(ref msg) => {
+                    hal::ShaderError::Device(error) => pipeline::CreateShaderModuleError::Device(
+                        self.handle_hal_error_with_nonfatal_oom(error),
+                    ),
+                    hal::ShaderError::Compilation(msg) => {
                         log::error!("Shader error: {msg}");
-                        pipeline::CreateShaderModuleError::Generation
+                        pipeline::CreateShaderModuleError::Compilation(msg)
                     }
                 })
             }
@@ -2475,12 +2475,12 @@ impl Device {
             Ok(raw) => raw,
             Err(error) => {
                 return Err(match error {
-                    hal::ShaderError::Device(error) => {
-                        pipeline::CreateShaderModuleError::Device(self.handle_hal_error(error))
-                    }
-                    hal::ShaderError::Compilation(ref msg) => {
+                    hal::ShaderError::Device(error) => pipeline::CreateShaderModuleError::Device(
+                        self.handle_hal_error_with_nonfatal_oom(error),
+                    ),
+                    hal::ShaderError::Compilation(msg) => {
                         log::error!("Shader error: {msg}");
-                        pipeline::CreateShaderModuleError::Generation
+                        pipeline::CreateShaderModuleError::Compilation(msg)
                     }
                 })
             }
@@ -3926,7 +3926,9 @@ impl Device {
             unsafe { self.raw().create_compute_pipeline(&pipeline_desc) }.map_err(
                 |err| match err {
                     hal::PipelineError::Device(error) => {
-                        pipeline::CreateComputePipelineError::Device(self.handle_hal_error(error))
+                        pipeline::CreateComputePipelineError::Device(
+                            self.handle_hal_error_with_nonfatal_oom(error),
+                        )
                     }
                     hal::PipelineError::Linkage(_stages, msg) => {
                         pipeline::CreateComputePipelineError::Internal(msg)
@@ -4687,7 +4689,9 @@ impl Device {
             unsafe { self.raw().create_render_pipeline(&pipeline_desc) }.map_err(
                 |err| match err {
                     hal::PipelineError::Device(error) => {
-                        pipeline::CreateRenderPipelineError::Device(self.handle_hal_error(error))
+                        pipeline::CreateRenderPipelineError::Device(
+                            self.handle_hal_error_with_nonfatal_oom(error),
+                        )
                     }
                     hal::PipelineError::Linkage(stage, msg) => {
                         pipeline::CreateRenderPipelineError::Internal { stage, error: msg }

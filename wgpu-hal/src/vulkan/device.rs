@@ -602,27 +602,21 @@ impl super::Device {
         })
     }
 
+    /// Returns the [`vk::Result`] of `vkCreateShaderModule` on failure, for the caller to map
+    /// with [`super::map_shader_module_err`] or [`super::map_pipeline_err`].
     fn create_shader_module_impl(
         &self,
         spv: &[u32],
         label: &crate::Label<'_>,
-    ) -> Result<vk::ShaderModule, crate::DeviceError> {
+    ) -> Result<vk::ShaderModule, vk::Result> {
         let vk_info = vk::ShaderModuleCreateInfo::default()
             .flags(vk::ShaderModuleCreateFlags::empty())
             .code(spv);
 
         let raw = unsafe {
             profiling::scope!("vkCreateShaderModule");
-            self.shared
-                .raw
-                .create_shader_module(&vk_info, None)
-                .map_err(map_err)?
+            self.shared.raw.create_shader_module(&vk_info, None)?
         };
-        fn map_err(err: vk::Result) -> crate::DeviceError {
-            // We don't use VK_NV_glsl_shader
-            // VK_ERROR_INVALID_SHADER_NV
-            super::map_host_device_oom_err(err)
-        }
 
         if let Some(label) = label {
             unsafe { self.shared.set_object_name(raw, label) };
@@ -715,7 +709,8 @@ impl super::Device {
                     naga::back::spv::write_vec(&module, &info, options, Some(&pipeline_options))
                 }
                 .map_err(|e| crate::PipelineError::Linkage(stage_flags, format!("{e}")))?;
-                self.create_shader_module_impl(&spv, &None)?
+                self.create_shader_module_impl(&spv, &None)
+                    .map_err(|e| super::map_pipeline_err(e, stage_flags, "vkCreateShaderModule"))?
             }
         };
 
@@ -1766,11 +1761,15 @@ impl crate::Device for super::Device {
                     None,
                 )
                 .map_err(|e| crate::ShaderError::Compilation(format!("{e}")))?;
-                super::ShaderModule::Raw(self.create_shader_module_impl(&spv, &desc.label)?)
+                super::ShaderModule::Raw(
+                    self.create_shader_module_impl(&spv, &desc.label)
+                        .map_err(super::map_shader_module_err)?,
+                )
             }
-            crate::ShaderInput::SpirV(data) => {
-                super::ShaderModule::Raw(self.create_shader_module_impl(data, &desc.label)?)
-            }
+            crate::ShaderInput::SpirV(data) => super::ShaderModule::Raw(
+                self.create_shader_module_impl(data, &desc.label)
+                    .map_err(super::map_shader_module_err)?,
+            ),
             crate::ShaderInput::MetalLib { .. }
             | crate::ShaderInput::Msl { .. }
             | crate::ShaderInput::Dxil { .. }
@@ -2033,13 +2032,29 @@ impl crate::Device for super::Device {
             .map(|it| it.raw)
             .unwrap_or(vk::PipelineCache::null());
 
+        let shader_stages = match desc.vertex_processor {
+            crate::VertexProcessor::Standard { .. } => wgt::ShaderStages::VERTEX,
+            crate::VertexProcessor::Mesh { ref task_stage, .. } => {
+                let mut stages = wgt::ShaderStages::MESH;
+                if task_stage.is_some() {
+                    stages |= wgt::ShaderStages::TASK;
+                }
+                stages
+            }
+        } | if desc.fragment_stage.is_some() {
+            wgt::ShaderStages::FRAGMENT
+        } else {
+            wgt::ShaderStages::empty()
+        };
         let mut raw_vec = {
             profiling::scope!("vkCreateGraphicsPipelines");
             unsafe {
                 self.shared
                     .raw
                     .create_graphics_pipelines(pipeline_cache, &vk_infos, None)
-                    .map_err(|(_, e)| super::map_pipeline_err(e))
+                    .map_err(|(_, e)| {
+                        super::map_pipeline_err(e, shader_stages, "vkCreateGraphicsPipelines")
+                    })
             }?
         };
 
@@ -2122,7 +2137,13 @@ impl crate::Device for super::Device {
                 self.shared
                     .raw
                     .create_compute_pipelines(pipeline_cache, &vk_infos, None)
-                    .map_err(|(_, e)| super::map_pipeline_err(e))
+                    .map_err(|(_, e)| {
+                        super::map_pipeline_err(
+                            e,
+                            wgt::ShaderStages::COMPUTE,
+                            "vkCreateComputePipelines",
+                        )
+                    })
             }?
         };
 
