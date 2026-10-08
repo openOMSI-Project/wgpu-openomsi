@@ -756,7 +756,15 @@ impl Drop for CoreBufferMappedRange {
 
 crate::cmp::impl_eq_ord_hash_arc_address!(ContextWgpuCore => .0);
 crate::cmp::impl_eq_ord_hash_proxy!(CoreAdapter => .id);
-crate::cmp::impl_eq_ord_hash_proxy!(CoreDevice => .id);
+// (with its instance: ids are counted per instance, and devices of two instances, e.g. two
+// renderers' or tests running side by side, had compared equal)
+crate::cmp::impl_eq_ord_hash_proxy!(CoreDevice => .identity());
+
+impl CoreDevice {
+    fn identity(&self) -> (usize, wgc::id::DeviceId) {
+        (Arc::as_ptr(&self.context.0) as usize, self.id)
+    }
+}
 crate::cmp::impl_eq_ord_hash_proxy!(CoreQueue => .id);
 crate::cmp::impl_eq_ord_hash_proxy!(CoreShaderModule => .id);
 crate::cmp::impl_eq_ord_hash_proxy!(CoreBindGroupLayout => .id);

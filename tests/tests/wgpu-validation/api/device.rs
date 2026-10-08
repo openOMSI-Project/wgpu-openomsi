@@ -58,3 +58,12 @@ fn hal_fence_value() {
     let value = unsafe { hal_device.get_fence_value(&fence) }.unwrap();
     assert_eq!(value, index.hal_fence_value());
 }
+
+/// Devices of two instances are not equal, though their ids (counted per instance) are.
+#[test]
+fn devices_of_two_instances_differ() {
+    let (a, _qa) = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
+    let (b, _qb) = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
+    assert_ne!(a, b);
+    assert_eq!(a, a.clone());
+}
