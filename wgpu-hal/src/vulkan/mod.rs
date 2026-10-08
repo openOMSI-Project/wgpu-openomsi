@@ -1452,12 +1452,44 @@ fn map_host_oom_and_ioca_err(err: vk::Result) -> crate::DeviceError {
 /// - VK_ERROR_OUT_OF_DEVICE_MEMORY
 /// - VK_PIPELINE_COMPILE_REQUIRED_EXT
 /// - VK_ERROR_INVALID_SHADER_NV
-fn map_pipeline_err(err: vk::Result) -> crate::DeviceError {
+///
+/// Drivers also report a failure of their shader compiler with other codes
+/// (`VK_ERROR_UNKNOWN`, `VK_ERROR_INITIALIZATION_FAILED`, ...). That is a failure
+/// to create this pipeline, not of the device: it is reported as
+/// [`crate::PipelineError::Linkage`] naming the failed call and code.
+/// `VK_ERROR_DEVICE_LOST` is still reported as a lost device.
+fn map_pipeline_err(
+    err: vk::Result,
+    stages: wgt::ShaderStages,
+    function: &str,
+) -> crate::PipelineError {
     // We don't use VK_EXT_pipeline_creation_cache_control
     // VK_PIPELINE_COMPILE_REQUIRED_EXT
-    // We don't use VK_NV_glsl_shader
-    // VK_ERROR_INVALID_SHADER_NV
-    map_host_device_oom_err(err)
+    match err {
+        vk::Result::ERROR_OUT_OF_HOST_MEMORY | vk::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
+            get_oom_err(err).into()
+        }
+        vk::Result::ERROR_DEVICE_LOST => get_lost_err().into(),
+        err => crate::PipelineError::Linkage(stages, format!("{function} failed: {err}")),
+    }
+}
+
+/// Maps the result of `vkCreateShaderModule`
+///
+/// - VK_ERROR_OUT_OF_HOST_MEMORY
+/// - VK_ERROR_OUT_OF_DEVICE_MEMORY
+/// - VK_ERROR_INVALID_SHADER_NV
+///
+/// Any other code (see [`map_pipeline_err`]) is reported as
+/// [`crate::ShaderError::Compilation`].
+fn map_shader_module_err(err: vk::Result) -> crate::ShaderError {
+    match err {
+        vk::Result::ERROR_OUT_OF_HOST_MEMORY | vk::Result::ERROR_OUT_OF_DEVICE_MEMORY => {
+            get_oom_err(err).into()
+        }
+        vk::Result::ERROR_DEVICE_LOST => get_lost_err().into(),
+        err => crate::ShaderError::Compilation(format!("vkCreateShaderModule failed: {err}")),
+    }
 }
 
 /// Returns [`crate::DeviceError::Unexpected`] or panics if the `internal_error_panic`
@@ -1555,3 +1587,47 @@ where
 /// - Callback must not change anything to what the instance does not support.
 pub type CreateInstanceCallback<'this> =
     dyn for<'arg, 'pnext> FnOnce(CreateInstanceCallbackArgs<'arg, 'pnext, 'this>) + 'this;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pipeline_creation_errors() {
+        let stages = wgt::ShaderStages::VERTEX_FRAGMENT;
+        assert_eq!(
+            map_pipeline_err(vk::Result::ERROR_OUT_OF_DEVICE_MEMORY, stages, "f"),
+            crate::PipelineError::Device(crate::DeviceError::OutOfMemory)
+        );
+        assert_eq!(
+            map_pipeline_err(vk::Result::ERROR_DEVICE_LOST, stages, "f"),
+            crate::PipelineError::Device(crate::DeviceError::Lost)
+        );
+        // A driver's shader compiler failing is not a device error.
+        for code in [
+            vk::Result::ERROR_UNKNOWN,
+            vk::Result::ERROR_INITIALIZATION_FAILED,
+            vk::Result::ERROR_INVALID_SHADER_NV,
+        ] {
+            match map_pipeline_err(code, stages, "vkCreateGraphicsPipelines") {
+                crate::PipelineError::Linkage(s, message) => {
+                    assert_eq!(s, stages);
+                    assert!(message.starts_with("vkCreateGraphicsPipelines failed"));
+                }
+                other => panic!("{code:?} mapped to {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn shader_module_creation_errors() {
+        assert_eq!(
+            map_shader_module_err(vk::Result::ERROR_OUT_OF_HOST_MEMORY),
+            crate::ShaderError::Device(crate::DeviceError::OutOfMemory)
+        );
+        assert!(matches!(
+            map_shader_module_err(vk::Result::ERROR_INVALID_SHADER_NV),
+            crate::ShaderError::Compilation(_)
+        ));
+    }
+}
