@@ -42,6 +42,10 @@ Bottom level categories:
 
 ## Unreleased
 
+### openOMSI fork
+
+- `RenderBundleEncoder::finish` reports its errors (an invalid buffer, bind group or pipeline, for example one whose allocation ran out of memory, or a lost device) through the error scopes and the uncaptured error handler, and returns an invalid bundle, instead of panicking.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features
