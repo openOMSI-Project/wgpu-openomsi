@@ -42,6 +42,12 @@ Bottom level categories:
 
 ## Unreleased
 
+### openOMSI fork
+
+#### GLES
+
+- Size the texture unit tables from `GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS` (up to 32) instead of a fixed 16, report `max_sampled_textures_per_shader_stage` from the driver's per-stage units, and report the combined count in the new `DownlevelLimits::max_sampled_textures_per_pipeline_layout` (and `max_samplers_per_pipeline_layout`). A pipeline layout using more texture units over all of its groups and stages than that is now rejected with `CreatePipelineLayoutError::TooManyBindingsAllStages` instead of panicking with an index out of bounds when the pipeline is created.
+
 ## v29.0.4 (2026-07-01)
 
 ### New Features

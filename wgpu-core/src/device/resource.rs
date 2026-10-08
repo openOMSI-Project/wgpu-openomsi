@@ -3728,6 +3728,7 @@ impl Device {
         count_validator
             .validate(&self.limits)
             .map_err(Error::TooManyBindings)?;
+        count_validator.validate_downlevel(&self.downlevel.limits)?;
 
         let get_bgl_iter = || {
             desc.bind_group_layouts

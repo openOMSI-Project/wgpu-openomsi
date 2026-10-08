@@ -381,6 +381,27 @@ impl super::Adapter {
         } else {
             vertex_shader_storage_textures.min(fragment_shader_storage_textures)
         };
+
+        // Texture units are a single pool shared by every stage of a program: a texture
+        // binding takes one unit whichever stages it is visible to. `MAX_TEXTURE_SLOTS` is
+        // the size of our fixed-size tables of those units.
+        let combined_texture_units =
+            unsafe { gl.get_parameter_i32(glow::MAX_COMBINED_TEXTURE_IMAGE_UNITS) }.max(0) as u32;
+        let mut stage_texture_units =
+            unsafe { gl.get_parameter_i32(glow::MAX_TEXTURE_IMAGE_UNITS) }
+                .min(unsafe { gl.get_parameter_i32(glow::MAX_VERTEX_TEXTURE_IMAGE_UNITS) });
+        if supports_compute {
+            stage_texture_units = stage_texture_units
+                .min(unsafe { gl.get_parameter_i32(glow::MAX_COMPUTE_TEXTURE_IMAGE_UNITS) });
+        }
+        // GLES 3.0 and GL 3.3 guarantee at least 16 units per stage and 32 combined, and we
+        // have always reported 16 per stage; keep that as the floor.
+        let max_texture_slots = combined_texture_units
+            .max(super::MIN_TEXTURE_SLOTS as u32)
+            .min(super::MAX_TEXTURE_SLOTS as u32);
+        let max_sampled_textures_per_shader_stage = (stage_texture_units.max(0) as u32)
+            .max(super::MIN_TEXTURE_SLOTS as u32)
+            .min(max_texture_slots);
         // NOTE: GL_ARB_compute_shader adds support for indirect dispatch
         let indirect_execution = supported((3, 1), (4, 3))
             || (extensions.contains("GL_ARB_draw_indirect") && supports_compute);
@@ -720,8 +741,8 @@ impl super::Adapter {
             max_bindings_per_bind_group: u32::MAX,
             max_dynamic_uniform_buffers_per_pipeline_layout: max_uniform_buffers_per_shader_stage,
             max_dynamic_storage_buffers_per_pipeline_layout: max_storage_buffers_per_shader_stage,
-            max_sampled_textures_per_shader_stage: super::MAX_TEXTURE_SLOTS as u32,
-            max_samplers_per_shader_stage: super::MAX_SAMPLERS as u32,
+            max_sampled_textures_per_shader_stage,
+            max_samplers_per_shader_stage: max_sampled_textures_per_shader_stage,
             max_storage_buffers_per_shader_stage,
             max_storage_textures_per_shader_stage,
             max_uniform_buffers_per_shader_stage,
@@ -868,7 +889,10 @@ impl super::Adapter {
             workarounds.set(super::Workarounds::MESA_I915_SRGB_SHADER_CLEAR, true);
         }
 
-        let downlevel_defaults = wgt::DownlevelLimits {};
+        let downlevel_limits = wgt::DownlevelLimits {
+            max_sampled_textures_per_pipeline_layout: max_texture_slots,
+            max_samplers_per_pipeline_layout: super::MAX_SAMPLERS as u32,
+        };
         let max_samples = unsafe { gl.get_parameter_i32(glow::MAX_SAMPLES) };
 
         // Drop the GL guard so we can move the context into AdapterShared
@@ -899,7 +923,7 @@ impl super::Adapter {
                 limits,
                 downlevel: wgt::DownlevelCapabilities {
                     flags: downlevel_flags,
-                    limits: downlevel_defaults,
+                    limits: downlevel_limits,
                     shader_model: wgt::ShaderModel::Sm5,
                 },
                 alignments: crate::Alignments {

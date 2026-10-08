@@ -8,7 +8,7 @@ use crate::{
 
 const LOWEST_DOWNLEVEL_PROPERTIES: wgpu::DownlevelCapabilities = DownlevelCapabilities {
     flags: wgpu::DownlevelFlags::empty(),
-    limits: wgpu::DownlevelLimits {},
+    limits: wgpu::DownlevelLimits::DEFAULT,
     shader_model: wgpu::ShaderModel::Sm2,
 };
 
