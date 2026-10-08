@@ -2,6 +2,8 @@
 # OpenGL ES3 API (aka GLES3).
 
 Designed to work on Linux and Android, with context provided by EGL.
+On Windows, the context comes from WGL, or, with the `angle` feature, optionally from
+[ANGLE](https://github.com/google/angle) through EGL (see `GlBackendOptions::platform`).
 
 ## Texture views
 
@@ -80,7 +82,7 @@ we don't bother with that combination.
 */
 
 ///cbindgen:ignore
-#[cfg(not(any(windows, webgl)))]
+#[cfg(any(not(any(windows, webgl)), windows_angle))]
 mod egl;
 #[cfg(Emscripten)]
 mod emscripten;
@@ -88,6 +90,8 @@ mod emscripten;
 mod web;
 #[cfg(windows)]
 mod wgl;
+#[cfg(windows_angle)]
+mod windows_platform;
 
 mod adapter;
 mod command;
@@ -108,10 +112,13 @@ pub use self::web::AdapterContext;
 #[cfg(webgl)]
 pub use self::web::{Instance, Surface};
 
-#[cfg(windows)]
+#[cfg(all(windows, not(windows_angle)))]
 use self::wgl::AdapterContext;
-#[cfg(windows)]
+#[cfg(all(windows, not(windows_angle)))]
 pub use self::wgl::{Instance, Surface};
+
+#[cfg(windows_angle)]
+pub use self::windows_platform::{AdapterContext, AdapterContextLock, Instance, Surface};
 
 use alloc::{boxed::Box, string::String, string::ToString as _, sync::Arc, vec::Vec};
 use core::{

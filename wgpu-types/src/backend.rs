@@ -275,6 +275,21 @@ pub struct GlBackendOptions {
     /// `None` (the default) uses the backend's built-in timeout: 6 seconds with EGL and
     /// 1 second with WGL.
     pub context_lock_timeout: Option<core::time::Duration>,
+    /// Which platform API creates the GL context on Windows: the system OpenGL driver (WGL,
+    /// the default) or [ANGLE](https://github.com/google/angle), which implements OpenGL ES 3.0
+    /// on top of Direct3D 11.
+    ///
+    /// ANGLE gives GPUs whose OpenGL, Vulkan and Direct3D 12 drivers are missing or broken (e.g.
+    /// Intel HD Graphics 2000-4000, AMD Radeon HD 5000/6000) a working backend through their
+    /// Direct3D 11 driver. It needs the `angle` cargo feature (together with `gles`) and Google's
+    /// ANGLE libraries `libEGL.dll` and `libGLESv2.dll` at run time, see [`AngleOptions`]. The
+    /// adapter still reports [`Backend::Gl`]; its name is ANGLE's renderer string, e.g.
+    /// `ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0, D3D11-...)`.
+    ///
+    /// Ignored on other platforms.
+    pub platform: GlPlatform,
+    /// How to load and set up ANGLE when [`platform`](Self::platform) is [`GlPlatform::Angle`].
+    pub angle: AngleOptions,
 }
 
 impl GlBackendOptions {
@@ -290,6 +305,8 @@ impl GlBackendOptions {
             fence_behavior: GlFenceBehavior::Normal,
             debug_fns,
             context_lock_timeout: None,
+            platform: GlPlatform::from_env().unwrap_or_default(),
+            angle: AngleOptions::default(),
         }
     }
 
@@ -306,8 +323,95 @@ impl GlBackendOptions {
             fence_behavior,
             debug_fns,
             context_lock_timeout: self.context_lock_timeout,
+            platform: self.platform.with_env(),
+            angle: self.angle,
         }
     }
+}
+
+/// Which platform API the OpenGL backend uses to create its context.
+///
+/// Only has an effect on Windows. See [`GlBackendOptions::platform`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum GlPlatform {
+    /// Let wgpu decide. Currently always [`Wgl`](Self::Wgl).
+    #[default]
+    Auto,
+    /// Use the system OpenGL driver through WGL.
+    Wgl,
+    /// Use [ANGLE](https://github.com/google/angle) through EGL, running OpenGL ES 3.0 on
+    /// Direct3D 11.
+    ///
+    /// Requires the `angle` cargo feature. Without it, or when the ANGLE libraries cannot be
+    /// loaded or cannot create a Direct3D 11 display, the OpenGL backend reports no adapter.
+    Angle,
+}
+
+impl GlPlatform {
+    /// Choose the platform from the environment variable `WGPU_GL_PLATFORM`.
+    ///
+    /// Possible values (case insensitive): `auto`, `wgl`, `angle`.
+    ///
+    /// Use with `unwrap_or_default()` to get the default value if the environment variable is not set.
+    #[must_use]
+    pub fn from_env() -> Option<Self> {
+        let value = crate::env::var("WGPU_GL_PLATFORM")
+            .as_deref()?
+            .to_lowercase();
+        match value.as_str() {
+            "auto" => Some(Self::Auto),
+            "wgl" => Some(Self::Wgl),
+            "angle" => Some(Self::Angle),
+            _ => None,
+        }
+    }
+
+    /// Takes the given platform, modifies it based on the `WGPU_GL_PLATFORM` environment variable, and returns the result.
+    ///
+    /// See `from_env` for more information.
+    #[must_use]
+    pub fn with_env(self) -> Self {
+        Self::from_env().unwrap_or(self)
+    }
+}
+
+/// Options for running the OpenGL backend on [ANGLE](https://github.com/google/angle).
+///
+/// Used when [`GlBackendOptions::platform`] is [`GlPlatform::Angle`].
+///
+/// wgpu expects Google's ANGLE (BSD licensed), with its Direct3D 11 renderer: the
+/// `libEGL.dll` and `libGLESv2.dll` that ship with Chrome, Edge or Electron applications, or
+/// built from source (`is_component_build = false`, `angle_enable_d3d11 = true`). Both DLLs
+/// must come from the same build and match the application's architecture (x64 for
+/// `x86_64-pc-windows-*`). ANGLE's Direct3D 11 renderer compiles its shaders with
+/// `d3dcompiler_47.dll`: Windows 8.1 and later have it in the system directory; for Windows 7,
+/// ship it next to the ANGLE DLLs (as Chrome does).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AngleOptions {
+    /// Directory containing `libEGL.dll` and `libGLESv2.dll`.
+    ///
+    /// `None` (the default) loads them by name, with the standard DLL search order, which
+    /// starts with the directory of the application's executable: putting the two DLLs next to
+    /// the `.exe` is enough.
+    pub library_directory: Option<String>,
+    /// Which Direct3D 11 device ANGLE renders with.
+    pub device_type: AngleDeviceType,
+    /// Highest Direct3D feature level ANGLE may use, as `(major, minor)`, e.g. `(10, 0)`.
+    ///
+    /// `None` (the default) lets ANGLE use the best level the device supports. ANGLE exposes
+    /// OpenGL ES 3.0 from feature level 10_0 and OpenGL ES 3.1 from 11_0; limiting the level is
+    /// mostly useful to test how an application behaves on older GPUs.
+    pub max_feature_level: Option<(u32, u32)>,
+}
+
+/// The Direct3D 11 device ANGLE renders with. See [`AngleOptions::device_type`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum AngleDeviceType {
+    /// The GPU's Direct3D 11 driver.
+    #[default]
+    Hardware,
+    /// WARP, Windows' software rasterizer. Slow, but available on every Windows 7 SP1+ system.
+    Warp,
 }
 
 /// Controls whether OpenGL debug functions are enabled.

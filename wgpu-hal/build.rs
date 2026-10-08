@@ -9,6 +9,8 @@ fn main() {
         Emscripten: { all(target_os = "emscripten", gles) },
         dx12: { all(target_os = "windows", feature = "dx12") },
         gles: { all(feature = "gles") },
+        // The GLES backend can use ANGLE (EGL on Direct3D 11) besides WGL on Windows.
+        windows_angle: { all(target_os = "windows", feature = "gles", feature = "angle") },
         // Within the GL ES backend, use `std` and be Send + Sync only if we are using a target
         // that, among the ones where the GL ES backend is supported, has `std`.
         gles_with_std: { all(
