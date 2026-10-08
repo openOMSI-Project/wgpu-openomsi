@@ -47,6 +47,7 @@ Bottom level categories:
 #### naga
 
 - [glsl-out] Never emit `invariant gl_FragCoord` for an `@invariant @builtin(position)` fragment input (e.g. when the vertex output struct is reused as the fragment input). Only `gl_Position` is declared invariant; desktop GL drivers and GLSL ES reject the fragment-side declaration.
+- [hlsl-out] Reserve DXC's built-in ray tracing names (`RAY_FLAG_*`, `COMMITTED_*`, `CANDIDATE_*`, `HIT_KIND_*`, `RAYTRACING_PIPELINE_FLAG_*`), so user identifiers with these names are renamed instead of redefining the built-ins.
 
 ## v29.0.4 (2026-07-01)
 
