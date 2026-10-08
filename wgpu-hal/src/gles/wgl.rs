@@ -32,13 +32,16 @@ use windows::{
     },
 };
 
-/// The amount of time to wait while trying to obtain a lock to the adapter context
-const CONTEXT_LOCK_TIMEOUT_SECS: u64 = 1;
+/// The default amount of time to wait while trying to obtain a lock to the adapter context.
+///
+/// Can be overridden with [`wgt::GlBackendOptions::context_lock_timeout`].
+const CONTEXT_LOCK_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// A wrapper around a `[`glow::Context`]` and the required WGL context that uses locking to
 /// guarantee exclusive access when shared with multiple threads.
 pub struct AdapterContext {
     inner: Arc<Mutex<Inner>>,
+    lock_timeout: Duration,
 }
 
 unsafe impl Sync for AdapterContext {}
@@ -56,22 +59,46 @@ impl AdapterContext {
         }
     }
 
+    pub(super) fn set_lock_timeout(&mut self, timeout: Duration) {
+        self.lock_timeout = timeout;
+    }
+
     /// Obtain a lock to the WGL context and get handle to the [`glow::Context`] that can be used to
     /// do rendering.
+    ///
+    /// Panics if the lock cannot be obtained within the context lock timeout (see
+    /// [`wgt::GlBackendOptions::context_lock_timeout`]); [`try_lock`](Self::try_lock) returns an
+    /// error instead.
     #[track_caller]
     pub fn lock(&self) -> AdapterContextLock<'_> {
-        let inner = self
-            .inner
-            // Don't lock forever. If it takes longer than 1 second to get the lock we've got a
-            // deadlock and should panic to show where we got stuck
-            .try_lock_for(Duration::from_secs(CONTEXT_LOCK_TIMEOUT_SECS))
-            .expect("Could not lock adapter context. This is most-likely a deadlock.");
+        // Don't lock forever. If it takes longer than the timeout to get the lock we've got a
+        // deadlock and should panic to show where we got stuck
+        self.try_lock()
+            .expect("Could not lock adapter context. This is most-likely a deadlock.")
+    }
+
+    /// Like [`lock`](Self::lock), but returns [`crate::DeviceError::Lost`] instead of panicking
+    /// if the lock cannot be obtained within the context lock timeout.
+    #[track_caller]
+    pub fn try_lock(&self) -> Result<AdapterContextLock<'_>, crate::DeviceError> {
+        let inner = self.lock_inner().ok_or(crate::DeviceError::Lost)?;
 
         if let Some(wgl) = &inner.context {
             wgl.make_current(inner.device.dc).unwrap()
         };
 
-        AdapterContextLock { inner }
+        Ok(AdapterContextLock { inner })
+    }
+
+    fn lock_inner(&self) -> Option<MutexGuard<'_, Inner>> {
+        let inner = self.inner.try_lock_for(self.lock_timeout);
+        if inner.is_none() {
+            log::error!(
+                "Could not lock adapter context within {:?}. This is most-likely a deadlock.",
+                self.lock_timeout
+            );
+        }
+        inner
     }
 
     /// Obtain a lock to the WGL context and get handle to the [`glow::Context`] that can be used to
@@ -82,8 +109,7 @@ impl AdapterContext {
     #[track_caller]
     fn lock_with_dc(&self, device: Gdi::HDC) -> windows::core::Result<AdapterContextLock<'_>> {
         let inner = self
-            .inner
-            .try_lock_for(Duration::from_secs(CONTEXT_LOCK_TIMEOUT_SECS))
+            .lock_inner()
             .expect("Could not lock adapter context. This is most-likely a deadlock.");
 
         if let Some(wgl) = &inner.context {
@@ -593,6 +619,7 @@ impl crate::Instance for Instance {
             super::Adapter::expose(
                 AdapterContext {
                     inner: self.inner.clone(),
+                    lock_timeout: CONTEXT_LOCK_TIMEOUT,
                 },
                 self.options.clone(),
             )
@@ -625,6 +652,7 @@ impl super::Adapter {
                         device: create_instance_device().ok()?,
                         context: None,
                     })),
+                    lock_timeout: CONTEXT_LOCK_TIMEOUT,
                 },
                 options,
             )

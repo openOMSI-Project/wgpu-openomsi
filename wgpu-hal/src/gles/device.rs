@@ -17,6 +17,10 @@ type ShaderStage<'a> = (
 );
 type NameBindingMap = FastHashMap<String, (super::BindingRegister, u8)>;
 
+/// The longest [`crate::Device::wait`] holds the GL context in one go while blocking on a fence.
+#[cfg(not(any(webgl, Emscripten)))]
+const FENCE_WAIT_SLICE: core::time::Duration = core::time::Duration::from_millis(5);
+
 struct CompilationContext<'a> {
     layout: &'a super::PipelineLayout,
     sampler_map: &'a mut super::SamplerBindMap,
@@ -562,7 +566,7 @@ impl crate::Device for super::Device {
             });
         }
 
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
 
         let target = if desc.usage.contains(wgt::BufferUses::INDEX) {
             glow::ELEMENT_ARRAY_BUFFER
@@ -688,7 +692,7 @@ impl crate::Device for super::Device {
                 slice.as_mut_ptr()
             }
             Some(raw) => {
-                let gl = &self.shared.context.lock();
+                let gl = &self.shared.context.try_lock()?;
                 unsafe { gl.bind_buffer(buffer.target, Some(raw)) };
                 let ptr = if let Some(ref map_read_allocation) = buffer.data {
                     let mut guard = lock(map_read_allocation);
@@ -755,7 +759,7 @@ impl crate::Device for super::Device {
         &self,
         desc: &crate::TextureDescriptor,
     ) -> Result<super::Texture, crate::DeviceError> {
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
 
         let render_usage = wgt::TextureUses::COLOR_TARGET
             | wgt::TextureUses::DEPTH_STENCIL_WRITE
@@ -1040,7 +1044,7 @@ impl crate::Device for super::Device {
         &self,
         desc: &crate::SamplerDescriptor,
     ) -> Result<super::Sampler, crate::DeviceError> {
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
 
         let raw = unsafe { gl.create_sampler().unwrap() };
 
@@ -1401,7 +1405,7 @@ impl crate::Device for super::Device {
             } => (vertex_stage, vertex_buffers),
             crate::VertexProcessor::Mesh { .. } => unreachable!(),
         };
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
         let mut shaders = ArrayVec::new();
         shaders.push((naga::ShaderStage::Vertex, vertex_stage));
         if let Some(ref fs) = desc.fragment_stage {
@@ -1496,7 +1500,7 @@ impl crate::Device for super::Device {
             super::PipelineCache,
         >,
     ) -> Result<super::ComputePipeline, crate::PipelineError> {
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
         let mut shaders = ArrayVec::new();
         shaders.push((naga::ShaderStage::Compute, &desc.stage));
         let inner = unsafe { self.create_pipeline(gl, shaders, desc.layout, desc.label, None) }?;
@@ -1539,7 +1543,7 @@ impl crate::Device for super::Device {
         &self,
         desc: &wgt::QuerySetDescriptor<crate::Label>,
     ) -> Result<super::QuerySet, crate::DeviceError> {
-        let gl = &self.shared.context.lock();
+        let gl = &self.shared.context.try_lock()?;
 
         let mut queries = Vec::with_capacity(desc.count as usize);
         for _ in 0..desc.count {
@@ -1590,8 +1594,8 @@ impl crate::Device for super::Device {
         &self,
         fence: &super::Fence,
     ) -> Result<crate::FenceValue, crate::DeviceError> {
-        #[cfg_attr(target_arch = "wasm32", allow(clippy::needless_borrow))]
-        Ok(fence.get_latest(&self.shared.context.lock()))
+        let gl = &self.shared.context.try_lock()?;
+        Ok(fence.get_latest(gl))
     }
     unsafe fn wait(
         &self,
@@ -1603,19 +1607,48 @@ impl crate::Device for super::Device {
             return Ok(true);
         }
 
-        let gl = &self.shared.context.lock();
         // MAX_CLIENT_WAIT_TIMEOUT_WEBGL is:
         // - 1s in Gecko https://searchfox.org/mozilla-central/rev/754074e05178e017ef6c3d8e30428ffa8f1b794d/dom/canvas/WebGLTypes.h#1386
         // - 0 in WebKit https://github.com/WebKit/WebKit/blob/4ef90d4672ca50267c0971b85db403d9684508ea/Source/WebCore/html/canvas/WebGL2RenderingContext.cpp#L110
         // - 0 in Chromium https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc;l=112;drc=a3cb0ac4c71ec04abfeaed199e5d63230eca2551
-        let timeout_ns = if cfg!(any(webgl, Emscripten)) {
-            0
-        } else {
-            timeout
-                .map(|t| t.as_nanos().min(u32::MAX as u128) as u32)
-                .unwrap_or(u32::MAX)
-        };
-        fence.wait(gl, wait_value, timeout_ns)
+        #[cfg(any(webgl, Emscripten))]
+        {
+            let _ = timeout;
+            let gl = &self.shared.context.try_lock()?;
+            fence.wait(gl, wait_value, 0)
+        }
+        #[cfg(not(any(webgl, Emscripten)))]
+        {
+            if !fence.can_block_on(wait_value) {
+                let gl = &self.shared.context.try_lock()?;
+                return fence.wait(gl, wait_value, 0);
+            }
+
+            // `glClientWaitSync` takes the timeout as a signed 32-bit number of nanoseconds, so a
+            // wait has always been capped to about 2.1 seconds.
+            let max_timeout = core::time::Duration::from_nanos(i32::MAX as u64);
+            let timeout = timeout.map_or(max_timeout, |t| t.min(max_timeout));
+
+            // The GL context is shared by every thread using the device, and stays locked for as
+            // long as we block in `glClientWaitSync`. Wait in short slices, unlocking the context
+            // in between, so that other threads are not locked out (and do not time out on the
+            // lock) for the whole wait.
+            let start = std::time::Instant::now();
+            loop {
+                let remaining = timeout.saturating_sub(start.elapsed());
+                let slice = remaining.min(FENCE_WAIT_SLICE);
+                {
+                    let gl = &self.shared.context.try_lock()?;
+                    if fence.wait(gl, wait_value, slice.as_nanos() as u32)? {
+                        return Ok(true);
+                    }
+                }
+                if remaining <= slice {
+                    return Ok(false);
+                }
+                std::thread::yield_now();
+            }
+        }
     }
 
     unsafe fn start_graphics_debugger_capture(&self) -> bool {
