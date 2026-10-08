@@ -1421,8 +1421,9 @@ impl dispatch::DeviceInterface for CoreDevice {
             .device_create_render_pipeline(self.id, &descriptor, None);
         if let Some(cause) = error {
             if let wgc::pipeline::CreateRenderPipelineError::Internal { stage, ref error } = cause {
-                log::error!("Shader translation error for stage {stage:?}: {error}");
-                log::error!("Please report it to https://github.com/gfx-rs/wgpu");
+                // (one line: a crash report that keeps the last line of the log kept only
+                // "Please report it", without the error itself)
+                log::error!("Shader translation error for stage {stage:?}: {error} (please report it to https://github.com/gfx-rs/wgpu)");
             }
             self.context.handle_error(
                 &self.error_sink,
@@ -1517,8 +1518,9 @@ impl dispatch::DeviceInterface for CoreDevice {
             .device_create_mesh_pipeline(self.id, &descriptor, None);
         if let Some(cause) = error {
             if let wgc::pipeline::CreateRenderPipelineError::Internal { stage, ref error } = cause {
-                log::error!("Shader translation error for stage {stage:?}: {error}");
-                log::error!("Please report it to https://github.com/gfx-rs/wgpu");
+                // (one line: a crash report that keeps the last line of the log kept only
+                // "Please report it", without the error itself)
+                log::error!("Shader translation error for stage {stage:?}: {error} (please report it to https://github.com/gfx-rs/wgpu)");
             }
             self.context.handle_error(
                 &self.error_sink,
@@ -3979,11 +3981,12 @@ impl dispatch::SurfaceOutputDetailInterface for CoreSurfaceOutputDetail {
     }
 
     fn texture_discard(&self) {
-        match self.context.0.surface_texture_discard(self.surface_id) {
-            Ok(_status) => (),
-            Err(err) => self
-                .context
-                .handle_error_fatal(err, "Surface::discard_texture"),
+        // A surface texture is discarded from `Drop`; a failure there (a lost device, a
+        // surface already gone) is not worth ending the process for - it was the drop of a
+        // frame that would not be shown anyway. (Upstream made the release non-fatal in
+        // v30, #9678.)
+        if let Err(err) = self.context.0.surface_texture_discard(self.surface_id) {
+            log::error!("Surface::discard_texture: {}", self.context.format_error(&err));
         }
     }
 }
