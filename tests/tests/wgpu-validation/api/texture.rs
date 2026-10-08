@@ -684,3 +684,57 @@ fn transient_invalid_storeop() {
       Some("Color attachment's usage contains TextureUsages(TRANSIENT). This can only be used with StoreOp::Discard, but StoreOp::Store was provided")
     );
 }
+
+/// Ensures that a texture created from a hal texture can be tracked from a given
+/// initial state, and that the state must be a single one.
+#[test]
+fn texture_from_hal_with_uses() {
+    let (device, queue) = wgpu::Device::noop(&wgpu::DeviceDescriptor::default());
+    let desc = wgpu::TextureDescriptor {
+        label: None,
+        size: wgpu::Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    };
+
+    let texture = valid(&device, || unsafe {
+        device.create_texture_from_hal_with_uses::<wgpu_hal::api::Noop>(
+            wgpu_hal::noop::Resource,
+            &desc,
+            wgpu::TextureUses::COLOR_TARGET,
+        )
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+    encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations::default(),
+        })],
+        ..Default::default()
+    });
+    valid(&device, || queue.submit([encoder.finish()]));
+
+    // An exclusive use can't be combined with another one.
+    fail(
+        &device,
+        || unsafe {
+            device.create_texture_from_hal_with_uses::<wgpu_hal::api::Noop>(
+                wgpu_hal::noop::Resource,
+                &desc,
+                wgpu::TextureUses::COLOR_TARGET | wgpu::TextureUses::COPY_DST,
+            )
+        },
+        Some("are not a valid initial state"),
+    );
+}

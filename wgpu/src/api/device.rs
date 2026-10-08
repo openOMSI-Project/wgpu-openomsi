@@ -327,11 +327,60 @@ impl Device {
         hal_texture: A::Texture,
         desc: &TextureDescriptor<'_>,
     ) -> Texture {
+        unsafe {
+            self.create_texture_from_hal_with_uses::<A>(
+                hal_texture,
+                desc,
+                TextureUses::UNINITIALIZED,
+            )
+        }
+    }
+
+    /// Creates a [`Texture`] from a wgpu-hal Texture that is already in the state
+    /// `initial_uses` maps to, so that wgpu tracks it from there.
+    ///
+    /// [`Device::create_texture_from_hal`] assumes a texture wgpu has not used yet,
+    /// which the first barrier transitions from the backend's initial state
+    /// (`D3D12_RESOURCE_STATE_COMMON` on DX12, `VK_IMAGE_LAYOUT_UNDEFINED` on Vulkan). A
+    /// texture another API hands over in a different state, such as an OpenXR swapchain
+    /// image in `D3D12_RESOURCE_STATE_RENDER_TARGET`, can be described with
+    /// [`TextureUses::COLOR_TARGET`] instead.
+    ///
+    /// `initial_uses` must be a single state: an exclusive use alone, or a combination of
+    /// read-only uses. Otherwise a validation error is raised.
+    ///
+    /// # Types
+    ///
+    /// The type of `A::Texture` depends on the backend:
+    ///
+    #[doc = crate::macros::hal_type_vulkan!("Texture")]
+    #[doc = crate::macros::hal_type_metal!("Texture")]
+    #[doc = crate::macros::hal_type_dx12!("Texture")]
+    #[doc = crate::macros::hal_type_gles!("Texture")]
+    ///
+    /// # Safety
+    ///
+    /// - `hal_texture` must be created from this device internal handle
+    /// - `hal_texture` must be created respecting `desc`
+    /// - `hal_texture` must be initialized
+    /// - all subresources of `hal_texture` must be in the backend state `initial_uses` maps
+    ///   to when the first submission using the texture executes
+    #[cfg(wgpu_core)]
+    #[must_use]
+    pub unsafe fn create_texture_from_hal_with_uses<A: hal::Api>(
+        &self,
+        hal_texture: A::Texture,
+        desc: &TextureDescriptor<'_>,
+        initial_uses: TextureUses,
+    ) -> Texture {
         let texture = unsafe {
             let core_device = self.inner.as_core();
-            core_device
-                .context
-                .create_texture_from_hal::<A>(hal_texture, core_device, desc)
+            core_device.context.create_texture_from_hal::<A>(
+                hal_texture,
+                core_device,
+                desc,
+                initial_uses,
+            )
         };
         Texture {
             inner: texture.into(),

@@ -45,6 +45,7 @@ Bottom level categories:
 ### openOMSI fork
 
 - Add `Adapter::memory_info()`, returning the adapter's dedicated and shared memory sizes and, where the backend reports them, the current memory budget and usage (`AdapterMemoryInfo`). Implemented for Vulkan (memory heaps, `VK_EXT_memory_budget`), DX12 (DXGI adapter description, `QueryVideoMemoryInfo`) and Metal (`recommendedMaxWorkingSetSize`, `currentAllocatedSize`); `None` elsewhere.
+- Add `Device::create_texture_from_hal_with_uses()`, which tracks a texture created from a hal texture from the given `TextureUses` instead of `UNINITIALIZED`, for textures another API hands over in a known state (e.g. OpenXR swapchain images in `D3D12_RESOURCE_STATE_RENDER_TARGET`).
 
 ## v29.0.4 (2026-07-01)
 
