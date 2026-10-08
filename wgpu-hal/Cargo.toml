@@ -132,6 +132,10 @@ gles = [
     "windows/Win32_System_LibraryLoader",
     "windows/Win32_UI_WindowsAndMessaging",
 ]
+## With `gles` on Windows, allows the GLES backend to run on ANGLE's Direct3D 11 renderer
+## (EGL + `libEGL.dll`/`libGLESv2.dll`) instead of WGL, selected at run time through
+## `GlBackendOptions::platform`. Has no effect on other platforms.
+angle = []
 ## Enables the DX12 backend when targeting Windows.
 dx12 = [
     "dep:arrayvec",

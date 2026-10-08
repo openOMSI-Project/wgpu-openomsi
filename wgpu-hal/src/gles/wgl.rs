@@ -107,7 +107,10 @@ impl AdapterContext {
     /// Unlike [`lock`](Self::lock), this accepts a device to pass to `make_current` and exposes the error
     /// when `make_current` fails.
     #[track_caller]
-    fn lock_with_dc(&self, device: Gdi::HDC) -> windows::core::Result<AdapterContextLock<'_>> {
+    pub(super) fn lock_with_dc(
+        &self,
+        device: Gdi::HDC,
+    ) -> windows::core::Result<AdapterContextLock<'_>> {
         let inner = self
             .lock_inner()
             .expect("Could not lock adapter context. This is most-likely a deadlock.");
@@ -210,6 +213,25 @@ pub struct Instance {
 
 unsafe impl Send for Instance {}
 unsafe impl Sync for Instance {}
+
+// With the `angle` feature, the backend's `AdapterContext` and `Surface` wrap either the WGL or
+// the EGL (ANGLE) ones; otherwise they are the WGL ones.
+#[cfg(not(windows_angle))]
+fn backend_adapter_context(context: AdapterContext) -> AdapterContext {
+    context
+}
+#[cfg(windows_angle)]
+fn backend_adapter_context(context: AdapterContext) -> super::AdapterContext {
+    super::AdapterContext::Wgl(context)
+}
+#[cfg(not(windows_angle))]
+fn backend_surface(surface: Surface) -> Surface {
+    surface
+}
+#[cfg(windows_angle)]
+fn backend_surface(surface: Surface) -> super::Surface {
+    super::Surface::wgl(surface)
+}
 
 fn load_gl_func(name: &str, module: Option<Foundation::HMODULE>) -> *const c_void {
     let addr = CString::new(name.as_bytes()).unwrap();
@@ -593,7 +615,7 @@ impl crate::Instance for Instance {
         &self,
         display_handle: RawDisplayHandle,
         window_handle: RawWindowHandle,
-    ) -> Result<Surface, crate::InstanceError> {
+    ) -> Result<<super::Api as crate::Api>::Surface, crate::InstanceError> {
         assert!(matches!(display_handle, RawDisplayHandle::Windows(_)));
         let window = if let RawWindowHandle::Win32(handle) = window_handle {
             handle
@@ -602,25 +624,25 @@ impl crate::Instance for Instance {
                 "unsupported window: {window_handle:?}"
             )));
         };
-        Ok(Surface {
+        Ok(backend_surface(Surface {
             // This cast exists because of https://github.com/rust-windowing/raw-window-handle/issues/171
             window: Foundation::HWND(window.hwnd.get() as *mut _),
             presentable: true,
             swapchain: RwLock::new(None),
             srgb_capable: self.srgb_capable,
-        })
+        }))
     }
 
     unsafe fn enumerate_adapters(
         &self,
-        _surface_hint: Option<&Surface>,
+        _surface_hint: Option<&<super::Api as crate::Api>::Surface>,
     ) -> Vec<crate::ExposedAdapter<super::Api>> {
         unsafe {
             super::Adapter::expose(
-                AdapterContext {
+                backend_adapter_context(AdapterContext {
                     inner: self.inner.clone(),
                     lock_timeout: CONTEXT_LOCK_TIMEOUT,
-                },
+                }),
                 self.options.clone(),
             )
         }
@@ -646,24 +668,26 @@ impl super::Adapter {
         let context = unsafe { glow::Context::from_loader_function(fun) };
         unsafe {
             Self::expose(
-                AdapterContext {
+                backend_adapter_context(AdapterContext {
                     inner: Arc::new(Mutex::new(Inner {
                         gl: ManuallyDrop::new(context),
                         device: create_instance_device().ok()?,
                         context: None,
                     })),
                     lock_timeout: CONTEXT_LOCK_TIMEOUT,
-                },
+                }),
                 options,
             )
         }
     }
 
+    #[cfg(not(windows_angle))]
     pub fn adapter_context(&self) -> &AdapterContext {
         &self.shared.context
     }
 }
 
+#[cfg(not(windows_angle))]
 impl super::Device {
     /// Returns the underlying WGL context.
     pub fn context(&self) -> &AdapterContext {

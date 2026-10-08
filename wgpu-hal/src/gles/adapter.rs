@@ -137,7 +137,12 @@ impl super::Adapter {
             "v3d",
             "apple m", // all apple m are integrated
         ];
-        let strings_that_imply_cpu = ["mesa offscreen", "swiftshader", "llvmpipe"];
+        let strings_that_imply_cpu = [
+            "mesa offscreen",
+            "swiftshader",
+            "llvmpipe",
+            "microsoft basic render driver", // WARP, e.g. through ANGLE
+        ];
 
         //TODO: handle Intel Iris XE as discreet
         let inferred_device_type = if vendor.contains("qualcomm")
@@ -1389,5 +1394,27 @@ mod tests {
             Adapter::parse_version("WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)").unwrap(),
             (3, 0)
         );
+    }
+
+    #[test]
+    fn test_angle_d3d11_info() {
+        let info = Adapter::make_info(
+            "Google Inc. (Intel)".into(),
+            "ANGLE (Intel, Intel(R) HD Graphics 4000 Direct3D11 vs_5_0 ps_5_0, D3D11-10.18.10.5161)"
+                .into(),
+            "OpenGL ES 3.0.0 (ANGLE 2.1.24127 git hash: 2a2b7c9c1c3c)".into(),
+        );
+        assert_eq!(info.backend, wgt::Backend::Gl);
+        assert!(info.name.contains("ANGLE") && info.name.contains("Direct3D11"));
+        assert_eq!(info.vendor, crate::auxil::db::intel::VENDOR);
+        assert_eq!(info.device_type, wgt::DeviceType::IntegratedGpu);
+
+        let warp = Adapter::make_info(
+            "Google Inc. (Microsoft)".into(),
+            "ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0, D3D11)"
+                .into(),
+            "OpenGL ES 3.0.0 (ANGLE 2.1.24127 git hash: 2a2b7c9c1c3c)".into(),
+        );
+        assert_eq!(warp.device_type, wgt::DeviceType::Cpu);
     }
 }
