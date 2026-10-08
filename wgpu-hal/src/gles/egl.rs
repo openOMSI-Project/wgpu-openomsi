@@ -179,9 +179,12 @@ struct EglContext {
 
 impl EglContext {
     fn make_current(&self) {
+        self.try_make_current().unwrap();
+    }
+
+    fn try_make_current(&self) -> Result<(), khronos_egl::Error> {
         self.instance
             .make_current(self.display, self.pbuffer, self.pbuffer, Some(self.raw))
-            .unwrap();
     }
 
     fn unmake_current(&self) {
@@ -981,7 +984,10 @@ impl crate::Instance for Instance {
         _surface_hint: Option<&Surface>,
     ) -> Vec<crate::ExposedAdapter<super::Api>> {
         let inner = self.inner.lock();
-        inner.egl.make_current();
+        if let Err(err) = inner.egl.try_make_current() {
+            log::error!("Failed to make EGL context current, no adapter exposed: {err:?}");
+            return Vec::new();
+        }
 
         let mut gl = unsafe {
             glow::Context::from_loader_function(|name| {

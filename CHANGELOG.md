@@ -45,6 +45,7 @@ Bottom level categories:
 ### openOMSI fork
 
 - `RenderBundleEncoder::finish` reports its errors (an invalid buffer, bind group or pipeline, for example one whose allocation ran out of memory, or a lost device) through the error scopes and the uncaptured error handler, and returns an invalid bundle, instead of panicking.
+- Adapter enumeration skips (and logs) an adapter whose driver fails a query instead of panicking: Vulkan `vkEnumerateDeviceExtensionProperties`, DX12 `CheckFeatureSupport` (feature levels, architecture, options), EGL `eglMakeCurrent`. A failing `vkCreateDebugUtilsMessengerEXT` disables debug utils instead of panicking, and a GL driver failing to create the clear shader program fails `request_device` instead of panicking.
 
 ## v29.0.4 (2026-07-01)
 
