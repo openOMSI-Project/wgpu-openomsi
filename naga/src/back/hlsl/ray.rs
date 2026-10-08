@@ -360,6 +360,14 @@ impl<W: Write> super::Writer<'_, W> {
                     "naga_contains_cull_no_opaque"
                 ])?
             )?;
+            // (Re-)initializing a query starts it over, so reset the tracker rather than
+            // adding to it: a query that finished traversal and is initialized again (for
+            // example in a loop) must be able to proceed again.
+            writeln!(
+                self.out,
+                "{level}{rq_tracker} = {};",
+                crate::back::RayQueryPoint::empty().bits()
+            )?;
             writeln!(
                 self.out,
                 "{level}if (naga_tmin_valid && naga_tmax_valid && naga_origin_valid && naga_dir_valid && !(naga_contains_skip_triangles_aabbs || naga_contains_skip_triangles_cull || naga_contains_multiple_opaque)) {{"
@@ -367,7 +375,7 @@ impl<W: Write> super::Writer<'_, W> {
             level = level.next();
             writeln!(
                 self.out,
-                "{level}{rq_tracker} = {rq_tracker} | {};",
+                "{level}{rq_tracker} = {};",
                 crate::back::RayQueryPoint::INITIALIZED.bits()
             )?;
         }

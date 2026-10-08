@@ -1,0 +1,10 @@
+capabilities = "RAY_QUERY"
+targets = "SPIRV | HLSL"
+
+[hlsl]
+shader_model = "V6_5"
+fake_missing_bindings = true
+zero_initialize_workgroup_memory = true
+
+[spv]
+version = [1, 4]
